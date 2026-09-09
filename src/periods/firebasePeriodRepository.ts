@@ -1,4 +1,4 @@
-import { get, ref, remove, runTransaction, serverTimestamp, set, type DataSnapshot } from "firebase/database";
+import { get, ref, runTransaction, serverTimestamp, type DataSnapshot } from "firebase/database";
 import type { Period } from "../cycle/types";
 import { getFirebaseDatabase } from "../firebase/database";
 import { calendarDate, timestamp } from "../utils/date";
@@ -12,22 +12,26 @@ export class FirebasePeriodRepository implements PeriodRepository {
     return records.sort((left, right) => right.startDate.localeCompare(left.startDate) || right.id.localeCompare(left.id));
   }
 
-  async create(period: Period): Promise<void> {
-    await set(ref(getFirebaseDatabase(), `couples/${period.coupleId}/periods/${period.id}`), {
-      startDate: period.startDate,
-      endDate: period.endDate,
-      createdAt: serverTimestamp(),
-      createdBy: period.createdBy,
-      updatedAt: serverTimestamp(),
-      updatedBy: period.updatedBy,
-      revision: 1,
+  async create(period: Period, operationId?: string): Promise<void> {
+    const target = ref(getFirebaseDatabase(), `couples/${period.coupleId}/periods/${period.id}`);
+    const mutationId = operationId ?? `period:${period.id}:create:1`;
+    const result = await runTransaction(target, (current: unknown) => {
+      if (current === null) return storedPeriod(period, mutationId);
+      if (isStoredPeriod(current) && current.mutationId === mutationId) return current;
+      return;
     });
+    if (!result.committed && !(isStoredPeriod(result.snapshot.val()) && result.snapshot.val().mutationId === mutationId)) {
+      throw new Error("Conflict: this period already exists with different data.");
+    }
   }
 
-  async update(coupleId: string, periodId: string, input: PeriodInput, expectedRevision: number, updatedBy: string): Promise<Period> {
+  async update(coupleId: string, periodId: string, input: PeriodInput, expectedRevision: number, updatedBy: string, operationId?: string): Promise<Period> {
     const target = ref(getFirebaseDatabase(), `couples/${coupleId}/periods/${periodId}`);
+    const mutationId = operationId ?? `period:${periodId}:update:${expectedRevision + 1}`;
     const result = await runTransaction(target, (current: unknown) => {
-      if (!isStoredPeriod(current) || current.revision !== expectedRevision) return;
+      if (!isStoredPeriod(current)) return;
+      if (current.mutationId === mutationId) return current;
+      if (current.revision !== expectedRevision) return;
       return {
         ...current,
         startDate: input.startDate,
@@ -35,14 +39,21 @@ export class FirebasePeriodRepository implements PeriodRepository {
         updatedAt: serverTimestamp(),
         updatedBy,
         revision: expectedRevision + 1,
+        mutationId,
       };
     });
-    if (!result.committed) throw new Error("This period changed on another device. Reload and try again.");
+    if (!result.committed && !(isStoredPeriod(result.snapshot.val()) && result.snapshot.val().mutationId === mutationId)) throw new Error("This period changed on another device. Reload and resolve the conflict.");
     return parsePeriod(coupleId, result.snapshot);
   }
 
-  async remove(coupleId: string, periodId: string): Promise<void> {
-    await remove(ref(getFirebaseDatabase(), `couples/${coupleId}/periods/${periodId}`));
+  async remove(coupleId: string, periodId: string, expectedRevision?: number, _operationId?: string): Promise<void> {
+    const target = ref(getFirebaseDatabase(), `couples/${coupleId}/periods/${periodId}`);
+    const result = await runTransaction(target, (current: unknown) => {
+      if (current === null) return;
+      if (!isStoredPeriod(current) || (expectedRevision !== undefined && current.revision !== expectedRevision)) return;
+      return null;
+    });
+    if (!result.committed && result.snapshot.exists()) throw new Error("This period changed on another device. Reload and resolve the conflict.");
   }
 }
 
@@ -54,6 +65,14 @@ interface StoredPeriod {
   updatedAt: unknown;
   updatedBy: unknown;
   revision: unknown;
+  mutationId?: unknown;
+}
+
+function storedPeriod(period: Period, operationId?: string): Record<string, unknown> {
+  return {
+    startDate: period.startDate, endDate: period.endDate, createdAt: serverTimestamp(), createdBy: period.createdBy,
+    updatedAt: serverTimestamp(), updatedBy: period.updatedBy, revision: 1, mutationId: operationId ?? null,
+  };
 }
 
 function isStoredPeriod(value: unknown): value is StoredPeriod {

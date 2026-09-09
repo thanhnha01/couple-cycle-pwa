@@ -16,9 +16,9 @@ export interface PeriodValidationIssue {
 
 export interface PeriodRepository {
   list(coupleId: string): Promise<Period[]>;
-  create(period: Period): Promise<void>;
-  update(coupleId: string, periodId: string, input: PeriodInput, expectedRevision: number, updatedBy: string): Promise<Period>;
-  remove(coupleId: string, periodId: string): Promise<void>;
+  create(period: Period, operationId?: string): Promise<void>;
+  update(coupleId: string, periodId: string, input: PeriodInput, expectedRevision: number, updatedBy: string, operationId?: string): Promise<Period>;
+  remove(coupleId: string, periodId: string, expectedRevision?: number, operationId?: string): Promise<void>;
 }
 
 export interface PeriodMutationResult {

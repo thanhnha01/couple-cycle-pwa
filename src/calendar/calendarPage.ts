@@ -1,7 +1,7 @@
 import { predictCycle, type Period } from "../cycle";
 import { addCalendarDays } from "../cycle/calendar-math";
 import { calendarDate, formatCalendarDate, type CalendarDate } from "../utils/date";
-import { PeriodService, PeriodValidationError } from "../periods/service";
+import { PeriodValidationError } from "../periods/service";
 import { findPeriodContaining, validatePeriodInput } from "../periods/validation";
 import { mondayWeekdayIndex, monthCalendarGrid, shiftCalendarMonth } from "./calendar-grid";
 
@@ -11,7 +11,12 @@ export interface CalendarPageContext {
   error: boolean;
   coupleId: string;
   uid: string;
-  service: PeriodService;
+  service: {
+    create(coupleId: string, uid: string, input: { startDate: CalendarDate; endDate: CalendarDate }, periods: readonly Period[]): Promise<unknown>;
+    update(period: Period, uid: string, input: { startDate: CalendarDate; endDate: CalendarDate }, periods: readonly Period[]): Promise<unknown>;
+    remove(period: Period): Promise<void>;
+    restoreDeleted(period: Period): Promise<void>;
+  };
   refresh: () => Promise<void>;
   rerender: () => void;
 }
@@ -156,7 +161,7 @@ export function bindCalendarPage(root: HTMLElement, context: CalendarPageContext
     if (!period || !window.confirm("Xóa kỳ kinh này?")) return;
     void context.service.remove(period).then(() => context.refresh()).then(() => { state.undo = period; state.selected = null; state.editingId = null; if (state.undoTimer !== undefined) window.clearTimeout(state.undoTimer); state.undoTimer = window.setTimeout(() => { state.undo = null; context.rerender(); }, 8000); context.rerender(); }).catch(() => { window.alert("Không thể xóa kỳ kinh. Vui lòng thử lại."); });
   });
-  root.querySelector<HTMLButtonElement>("#period-undo")?.addEventListener("click", () => { const undo = state.undo; if (!undo) return; void context.service.restore(undo).then(() => context.refresh()).then(() => { state.undo = null; context.rerender(); }).catch(() => { window.alert("Không thể hoàn tác. Vui lòng thử lại."); }); });
+  root.querySelector<HTMLButtonElement>("#period-undo")?.addEventListener("click", () => { const undo = state.undo; if (!undo) return; void context.service.restoreDeleted(undo).then(() => context.refresh()).then(() => { state.undo = null; context.rerender(); }).catch(() => { window.alert("Không thể hoàn tác. Vui lòng thử lại."); }); });
   if (state.focusAfterRender) {
     state.focusAfterRender = false;
     root.querySelector<HTMLButtonElement>(`[data-calendar-date="${state.focusDate}"]`)?.focus();

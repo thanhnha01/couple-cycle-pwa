@@ -1,5 +1,5 @@
 export const DATABASE_NAME = "couple-cycle";
-export const DATABASE_VERSION = 2;
+export const DATABASE_VERSION = 3;
 const LEGACY_CYCLE_PREDICTIONS_STORE = "cyclePredictions";
 
 export const STORE_NAMES = [
@@ -15,6 +15,12 @@ export const STORE_NAMES = [
 export type StoreName = (typeof STORE_NAMES)[number];
 
 let databasePromise: Promise<IDBDatabase> | undefined;
+
+/** Clears a rejected open promise so a transient/private-mode failure can be retried. */
+function rejectOpen(reject: (reason?: unknown) => void, error: Error): void {
+  databasePromise = undefined;
+  reject(error);
+}
 
 export function openDatabase(): Promise<IDBDatabase> {
   if (!databasePromise) {
@@ -33,6 +39,10 @@ export function openDatabase(): Promise<IDBDatabase> {
             database.createObjectStore(storeName, { keyPath: "id" });
           }
         }
+        const operations = request.transaction?.objectStore("syncOperations");
+        if (operations && !operations.indexNames.contains("byCoupleCreated")) {
+          operations.createIndex("byCoupleCreated", ["coupleId", "createdAt"], { unique: false });
+        }
       });
 
       request.addEventListener("success", () => {
@@ -40,8 +50,8 @@ export function openDatabase(): Promise<IDBDatabase> {
         database.addEventListener("versionchange", () => database.close());
         resolve(database);
       });
-      request.addEventListener("error", () => reject(request.error ?? new Error("Could not open IndexedDB.")));
-      request.addEventListener("blocked", () => reject(new Error("IndexedDB upgrade is blocked by another tab.")));
+      request.addEventListener("error", () => rejectOpen(reject, request.error ?? new Error("Could not open IndexedDB.")));
+      request.addEventListener("blocked", () => rejectOpen(reject, new Error("IndexedDB upgrade is blocked by another tab.")));
     });
   }
 

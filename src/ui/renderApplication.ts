@@ -10,7 +10,10 @@ import type { CoupleSessionState } from "../couple/session";
 import type { CoupleMembership, InviteDetails } from "../couple/types";
 import { bindCalendarPage, renderCalendarPage } from "../calendar/calendarPage";
 import type { Period } from "../cycle/types";
-import type { PeriodService } from "../periods/service";
+import type { OfflinePeriodService } from "../sync/offlinePeriodService";
+import type { SyncOperation, SyncState } from "../sync/types";
+import type { Presence } from "../couple/types";
+import { predictCycle } from "../cycle";
 
 interface RenderContext {
   auth: AuthenticationService;
@@ -26,13 +29,16 @@ interface RenderContext {
   periods: readonly Period[];
   periodsLoading: boolean;
   periodsError: boolean;
-  periodService: PeriodService;
+  periodService: OfflinePeriodService;
   refreshPeriods: () => Promise<void>;
+  syncState: SyncState;
+  syncOperations: readonly SyncOperation[];
+  presence: readonly Presence[];
   rerender: () => void;
 }
 
 const primaryNavigation: readonly [RoutePath, string][] = [
-  ["/home", "Home"], ["/calendar", "Calendar"], ["/insights", "Insights"], ["/settings", "Settings"],
+  ["/home", "Home"], ["/calendar", "Calendar"], ["/history", "History"], ["/insights", "Insights"], ["/settings", "Settings"],
 ];
 const routeHref = (path: RoutePath): string => `#${path}`;
 
@@ -40,6 +46,16 @@ function shell(content: string): string {
   return `<div class="app-shell">
     <header class="topbar"><a class="brand" data-route href="${routeHref("/home")}" aria-label="Couple Cycle home"><span class="brand-mark" aria-hidden="true">C</span><span>Couple Cycle</span></a></header>
     ${content}<div id="pwa-notices" class="pwa-notices" aria-live="polite"></div></div>`;
+}
+
+function syncLabel(state: SyncState): string {
+  return ({ synced: "Synced", syncing: "Syncing", offline: "Offline", pending: "Pending", error: "Sync error" })[state];
+}
+
+function statusStrip(context: RenderContext): string {
+  const partnerOnline = context.presence.some((person) => person.userId !== (context.authSession.status === "authenticated" ? context.authSession.user.uid : "") && person.state === "online");
+  const conflicts = context.syncOperations.filter((operation) => operation.status === "conflict").length;
+  return `<div class="connection-strip" role="status" aria-live="polite"><span class="sync-dot sync-${context.syncState}" aria-hidden="true"></span><span>${syncLabel(context.syncState)}</span><span class="partner-status">Partner ${partnerOnline ? "online" : "away"}</span>${conflicts ? `<button id="show-conflicts" class="text-button" type="button">${conflicts} conflict${conflicts === 1 ? "" : "s"}</button>` : ""}</div>`;
 }
 
 export function renderApplication(root: HTMLElement, route: AppRoute, context: RenderContext): void {
@@ -203,20 +219,49 @@ function renderProtectedRoute(root: HTMLElement, route: AppRoute, context: Rende
     .join("");
   const membership = context.coupleSession.status === "linked" ? context.coupleSession.membership : undefined;
   if (route.path === "/calendar" && membership && context.authSession.status === "authenticated") {
-    root.innerHTML = shell(`<main class="page">${renderCalendarPage({ periods: context.periods, loading: context.periodsLoading, error: context.periodsError, coupleId: membership.coupleId, uid: context.authSession.user.uid, service: context.periodService, refresh: context.refreshPeriods, rerender: context.rerender })}</main><nav class="bottom-nav" aria-label="Primary navigation">${navigation}</nav>`);
+    root.innerHTML = shell(`<main class="page">${statusStrip(context)}${renderCalendarPage({ periods: context.periods, loading: context.periodsLoading, error: context.periodsError, coupleId: membership.coupleId, uid: context.authSession.user.uid, service: context.periodService, refresh: context.refreshPeriods, rerender: context.rerender })}</main><nav class="bottom-nav" aria-label="Primary navigation">${navigation}</nav>`);
     bindCalendarPage(root, { periods: context.periods, loading: context.periodsLoading, error: context.periodsError, coupleId: membership.coupleId, uid: context.authSession.user.uid, service: context.periodService, refresh: context.refreshPeriods, rerender: context.rerender });
+    bindSyncActions(root, context);
     return;
   }
-  const sharedSummary = route.path === "/home" && membership
-    ? `<div class="shared-summary"><span class="role-badge">${membership.member.role}</span><strong>${escapeHtml(membership.profile.name)}</strong><span>Your private space is connected.</span></div>`
-    : "";
-  root.innerHTML = shell(`<main class="page"><section class="placeholder-card" aria-labelledby="page-title"><p class="eyebrow">${route.eyebrow}</p><h1 id="page-title">${route.title}</h1><p class="description">${route.description}</p>
-    ${sharedSummary}
-    <div class="protected-actions"><button id="logout-button" class="secondary-button" type="button">Sign out</button><p id="logout-status" class="form-status" role="alert" aria-live="assertive"></p></div></section></main>
+  const page = route.path === "/home" ? homePage(context, membership) : route.path === "/history" ? historyPage(context) : route.path === "/insights" ? insightsPage(context) : settingsPage(context, membership);
+  root.innerHTML = shell(`<main class="page">${statusStrip(context)}${page}</main>
     <nav class="bottom-nav" aria-label="Primary navigation">${navigation}</nav>`);
 
   bindLogout(root, context);
+  bindSyncActions(root, context);
 }
+
+function bindSyncActions(root: HTMLElement, context: RenderContext): void {
+  for (const button of root.querySelectorAll<HTMLButtonElement>("#settings-sync-retry, #show-conflicts")) {
+    button.addEventListener("click", () => { button.disabled = true; void context.periodService.replay().finally(() => { button.disabled = false; context.rerender(); }); });
+  }
+}
+
+function historyPage(context: RenderContext): string {
+  const rows = [...context.periods].sort((a, b) => b.startDate.localeCompare(a.startDate)).map((period) => `<li><strong>${formatDate(period.startDate)}${period.endDate ? ` – ${formatDate(period.endDate)}` : ""}</strong><span>Actual record · revision ${period.revision}</span></li>`).join("");
+  return `<section class="beta-page" aria-labelledby="page-title"><p class="eyebrow">Actual records</p><h1 id="page-title">Period history</h1>${context.periodsLoading ? "<p class=\"state-message\">Restoring local history…</p>" : context.periodsError ? "<p class=\"state-message error-state\">History is safe on this device, but could not be read. Try again from Calendar.</p>" : rows ? `<ol class="history-list">${rows}</ol>` : "<p class=\"state-message\">No periods recorded yet. Add your first actual period in Calendar.</p>"}</section>`;
+}
+
+function homePage(context: RenderContext, membership: CoupleMembership | undefined): string {
+  const prediction = predictCycle({ periods: context.periods, asOfDate: localDate() });
+  const upcoming = prediction.expectedDate ? `Expected around ${formatDate(prediction.expectedDate)}` : "Add a few periods to see a local estimate.";
+  return `<section class="beta-page" aria-labelledby="page-title"><p class="eyebrow">Shared cycle journal</p><h1 id="page-title">A calmer way to stay in step.</h1><p class="lead">${escapeHtml(upcoming)}</p><div class="home-action"><a class="primary-link" data-route href="#/calendar">Log a period</a><span>Actual records stay private to your shared space.</span></div><section class="editorial-section"><div><p class="section-kicker">Your space</p><h2>${escapeHtml(membership?.profile.name ?? "Couple Cycle")}</h2></div><p>${context.presence.some((person) => person.state === "online") ? "Someone is here now." : "Your partner’s status updates when they reconnect."}</p></section><section class="actual-note"><strong>Recorded data</strong><span>${context.periods.length} actual period${context.periods.length === 1 ? "" : "s"} · predictions are calculated only on this device.</span></section></section>`;
+}
+
+function insightsPage(context: RenderContext): string {
+  const prediction = predictCycle({ periods: context.periods, asOfDate: localDate() });
+  const range = prediction.predictionWindow ? `${formatDate(prediction.predictionWindow.start)} – ${formatDate(prediction.predictionWindow.end)}` : "Not enough recorded history";
+  return `<section class="beta-page" aria-labelledby="page-title"><p class="eyebrow">Pattern, not a promise</p><h1 id="page-title">Cycle insights</h1><section class="insight-feature"><p class="section-kicker">Next period estimate</p><h2>${escapeHtml(range)}</h2><p>${prediction.confidence.level === "insufficient" ? "Keep logging actual periods; estimates improve with consistent history." : `Confidence: ${prediction.confidence.level}. This is a cycle estimate, not medical advice.`}</p></section><dl class="insight-stats"><div><dt>Typical cycle</dt><dd>${prediction.cycleLength.expected ?? "—"}${prediction.cycleLength.expected ? " days" : ""}</dd></div><div><dt>Recorded periods</dt><dd>${context.periods.length}</dd></div></dl><p class="disclaimer">No fertility or ovulation claims are made. Predictions are derived locally and are never stored or shared as health records.</p></section>`;
+}
+
+function settingsPage(context: RenderContext, membership: CoupleMembership | undefined): string {
+  const failures = context.syncOperations.filter((operation) => operation.status === "failed" || operation.status === "conflict");
+  return `<section class="beta-page" aria-labelledby="page-title"><p class="eyebrow">Account & data</p><h1 id="page-title">Settings</h1><section class="settings-list"><div><strong>Shared space</strong><span>${escapeHtml(membership?.profile.name ?? "")}</span></div><div><strong>Local sync</strong><span>${syncLabel(context.syncState)}${context.syncOperations.length ? ` · ${context.syncOperations.length} pending` : ""}</span></div><div><strong>Partner</strong><span>${context.presence.some((person) => person.state === "online") ? "Online" : "Offline"}</span></div></section>${failures.length ? `<section class="conflict-panel" role="alert"><strong>Action needed</strong><p>${failures.length} sync change${failures.length === 1 ? " needs" : "s need"} review. Your local data was kept and no newer remote record was overwritten.</p><button id="settings-sync-retry" class="secondary-button" type="button">Retry sync</button></section>` : ""}<div class="protected-actions"><button id="logout-button" class="secondary-button" type="button">Sign out</button><p id="logout-status" class="form-status" role="alert" aria-live="assertive"></p></div></section>`;
+}
+
+function localDate(): import("../utils/date").CalendarDate { const value = new Date(); return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}` as import("../utils/date").CalendarDate; }
+function formatDate(value: string): string { return new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
 
 function renderOnboarding(root: HTMLElement, context: RenderContext): void {
   const query = queryFromHash(window.location.hash);

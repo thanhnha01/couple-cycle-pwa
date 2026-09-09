@@ -102,7 +102,7 @@
           ".read": "auth != null && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
           "$periodId": {
             ".write": "auth != null && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
-            ".validate": "!newData.exists() || newData.hasChildren(['startDate', 'endDate', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'revision'])",
+            ".validate": "!newData.exists() || newData.hasChildren(['startDate', 'endDate', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'revision', 'mutationId'])",
             "startDate": {
               ".validate": "newData.isString() && newData.val().length === 10"
             },
@@ -124,13 +124,24 @@
             "revision": {
               ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 1) || (data.exists() && newData.val() === data.val() + 1))"
             },
+            "mutationId": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128"
+            },
             "$other": {
               ".validate": false
             }
           }
         },
         "presence": {
-          ".write": false
+          ".read": "auth != null && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
+            ".validate": "newData.hasChildren(['state', 'lastSeenAt', 'updatedAt'])",
+            "state": { ".validate": "newData.val() === 'online' || newData.val() === 'away' || newData.val() === 'offline'" },
+            "lastSeenAt": { ".validate": "newData.isNumber()" },
+            "updatedAt": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
         },
         "$other": {
           ".validate": false

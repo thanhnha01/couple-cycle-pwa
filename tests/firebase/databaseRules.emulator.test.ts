@@ -338,6 +338,7 @@ describe("shared period permissions", () => {
     updatedAt: serverTimestamp,
     updatedBy: uid,
     revision: 1,
+    mutationId: "period:p1:create:1",
   });
 
   it("allows both members to create, read, update, and delete periods while denying outsiders", async () => {
@@ -346,7 +347,7 @@ describe("shared period permissions", () => {
     const path = `couples/${OWNER_A.uid}/periods/p1`;
     await assertSucceeds(databaseFor(OWNER_A).ref(path).set(periodValue(OWNER_A.uid)));
     await assertSucceeds(databaseFor(JOINER_B).ref(path).once("value"));
-    await assertSucceeds(databaseFor(JOINER_B).ref(path).update({ updatedAt: serverTimestamp, updatedBy: JOINER_B.uid, revision: 2 }));
+    await assertSucceeds(databaseFor(JOINER_B).ref(path).update({ updatedAt: serverTimestamp, updatedBy: JOINER_B.uid, revision: 2, mutationId: "period:p1:update:2" }));
     await assertSucceeds(databaseFor(JOINER_B).ref(path).remove());
     await assertFails(databaseFor(OUTSIDER).ref(`couples/${OWNER_A.uid}/periods/p2`).set(periodValue(OUTSIDER.uid)));
     await assertFails(databaseFor(OUTSIDER).ref(`couples/${OWNER_A.uid}/periods`).once("value"));

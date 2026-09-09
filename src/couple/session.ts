@@ -1,6 +1,7 @@
 import type { Unsubscribe } from "../auth/contracts";
 import type { CoupleApplicationService } from "./contracts";
 import type { CoupleMembership } from "./types";
+import type { CoupleProfile } from "./types";
 
 export type CoupleSessionState =
   | { status: "initializing" }
@@ -34,6 +35,11 @@ export class CoupleSessionStore {
   setMembership(membership: CoupleMembership): void {
     this.loadSequence += 1;
     this.update({ status: "linked", membership });
+  }
+
+  updateProfile(profile: CoupleProfile): void {
+    if (this.state.status !== "linked") return;
+    this.update({ status: "linked", membership: { ...this.state.membership, profile } });
   }
 
   reset(): void {

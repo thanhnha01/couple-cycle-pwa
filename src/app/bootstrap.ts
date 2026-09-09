@@ -10,8 +10,13 @@ import type { CoupleMembership, InviteDetails } from "../couple/types";
 import type { Period } from "../cycle/types";
 import { isFirebaseConfigured } from "../firebase/config";
 import { FirebasePeriodRepository } from "../periods/firebasePeriodRepository";
-import { PeriodService } from "../periods/service";
 import { setupPwa } from "../pwa/setupPwa";
+import { createRepositories } from "../storage/repositories";
+import { IndexedDbPeriodStore } from "../sync/indexedDbPeriodStore";
+import { OfflinePeriodService } from "../sync/offlinePeriodService";
+import { subscribeRealtimeCouple } from "../sync/realtimeCouple";
+import type { Presence } from "../couple/types";
+import type { SyncOperation, SyncState } from "../sync/types";
 import { renderApplication } from "../ui/renderApplication";
 import { guardedDestination } from "./routeGuards";
 import { createRouter, queryFromHash } from "./router";
@@ -26,7 +31,15 @@ export async function bootstrapApplication(): Promise<void> {
     : new UnavailableAuthService();
   const authSession = new AuthSessionStore(auth);
   const couples = new CoupleService(new FirebaseCoupleRepository());
-  const periodService = new PeriodService(new FirebasePeriodRepository());
+  const repositories = createRepositories();
+  const periodService = new OfflinePeriodService({
+    store: new IndexedDbPeriodStore(),
+    remote: isFirebaseConfigured ? new FirebasePeriodRepository() : undefined,
+    onChange: (nextPeriods, nextState, nextOperations) => {
+      periods = [...nextPeriods]; syncState = nextState; syncOperations = [...nextOperations];
+      periodsLoading = false; render();
+    },
+  });
   const coupleSession = new CoupleSessionStore(couples);
   let currentRoute: AppRoute = routes[0]!;
   let loadedUid: string | undefined;
@@ -36,6 +49,11 @@ export async function bootstrapApplication(): Promise<void> {
   let periodsLoading = false;
   let periodsError = false;
   let loadedPeriodsCoupleId: string | undefined;
+  let syncState: SyncState = isFirebaseConfigured ? "synced" : "offline";
+  let syncOperations: SyncOperation[] = [];
+  let presence: Presence[] = [];
+  let stopRealtime: (() => void) | undefined;
+  let activeCoupleId: string | undefined;
 
   let router: ReturnType<typeof createRouter>;
   const refreshPeriods = async (): Promise<void> => {
@@ -44,8 +62,9 @@ export async function bootstrapApplication(): Promise<void> {
     periodsError = false;
     render();
     try {
-      periods = await periodService.list(coupleSession.snapshot.membership.coupleId);
+      periods = await periodService.restore(coupleSession.snapshot.membership.coupleId);
       loadedPeriodsCoupleId = coupleSession.snapshot.membership.coupleId;
+      void periodService.replay();
     } catch {
       periodsError = true;
     } finally {
@@ -78,7 +97,7 @@ export async function bootstrapApplication(): Promise<void> {
         .finally(() => { inviteLoading = false; render(); });
     }
 
-    if (currentRoute.path === "/calendar" && coupleSession.snapshot.status === "linked" && loadedPeriodsCoupleId !== coupleSession.snapshot.membership.coupleId && !periodsLoading) {
+    if (coupleSession.snapshot.status === "linked" && loadedPeriodsCoupleId !== coupleSession.snapshot.membership.coupleId && !periodsLoading) {
       void refreshPeriods();
     }
 
@@ -104,6 +123,9 @@ export async function bootstrapApplication(): Promise<void> {
       periodsError,
       periodService,
       refreshPeriods,
+      syncState,
+      syncOperations,
+      presence,
       rerender: render,
     });
   };
@@ -122,18 +144,61 @@ export async function bootstrapApplication(): Promise<void> {
       currentInvite = undefined;
       periods = [];
       loadedPeriodsCoupleId = undefined;
-      void coupleSession.load(state.user.uid);
+      void restoreCachedMembership(state.user.uid, repositories).then((cached) => {
+        if (cached) coupleSession.setMembership(cached);
+        return coupleSession.load(state.user.uid);
+      });
     } else if (state.status !== "authenticated" && loadedUid) {
       loadedUid = undefined;
       currentInvite = undefined;
       coupleSession.reset();
+      stopRealtime?.(); stopRealtime = undefined; activeCoupleId = undefined; presence = []; periodService.dispose();
     }
     render();
   });
-  coupleSession.subscribe(render);
+  coupleSession.subscribe((session) => {
+    if (session.status === "linked") {
+      const { membership } = session;
+      void cacheMembership(membership, stateUserId(authSession), repositories);
+      if (isFirebaseConfigured && activeCoupleId !== membership.coupleId && authSession.snapshot.status === "authenticated") {
+        stopRealtime?.();
+        activeCoupleId = membership.coupleId;
+        stopRealtime = subscribeRealtimeCouple(membership.coupleId, authSession.snapshot.user.uid, {
+          profile: (profile) => { if (profile) coupleSession.updateProfile(profile); },
+          periods: (remotePeriods) => { void periodService.applyRemote(remotePeriods).catch(() => { periodsError = true; render(); }); },
+          presence: (nextPresence) => { presence = nextPresence; render(); },
+        });
+      }
+      void periodService.replay();
+    }
+    render();
+  });
   authSession.start();
   router.start();
   await setupPwa();
+}
+
+function stateUserId(session: AuthSessionStore): string {
+  return session.snapshot.status === "authenticated" ? session.snapshot.user.uid : "";
+}
+
+async function restoreCachedMembership(uid: string, repositories: ReturnType<typeof createRepositories>): Promise<CoupleMembership | undefined> {
+  try {
+    const member = (await repositories.members.list()).find((item) => item.userId === uid);
+    if (!member) return undefined;
+    const couple = await repositories.couples.get(member.coupleId);
+    return couple ? { coupleId: member.coupleId, profile: { name: couple.name, createdAt: couple.createdAt, ownerUid: couple.ownerUid, memberCount: couple.memberCount }, member: { role: member.role, joinedAt: member.joinedAt } } : undefined;
+  } catch { return undefined; }
+}
+
+async function cacheMembership(membership: CoupleMembership, uid: string, repositories: ReturnType<typeof createRepositories>): Promise<void> {
+  if (!uid) return;
+  try {
+    await Promise.all([
+      repositories.couples.save({ id: membership.coupleId, ...membership.profile }),
+      repositories.members.save({ id: `${membership.coupleId}:${uid}`, coupleId: membership.coupleId, userId: uid, ...membership.member }),
+    ]);
+  } catch { /* Cache loss must not block the verified remote session. */ }
 }
 
 const PENDING_INVITE_ROUTE = "couple-cycle:pending-invite-route";
