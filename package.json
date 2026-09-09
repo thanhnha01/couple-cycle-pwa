@@ -10,12 +10,15 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
+    "test:rules": "firebase emulators:exec --only database --project demo-couple-cycle \"vitest run --config vitest.rules.config.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "firebase": "^12.2.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase-tools": "^15.29.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.4",
     "vitest": "^3.2.4"
