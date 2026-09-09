@@ -99,7 +99,35 @@
           }
         },
         "periods": {
-          ".write": false
+          ".read": "auth != null && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
+          "$periodId": {
+            ".write": "auth != null && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
+            ".validate": "!newData.exists() || newData.hasChildren(['startDate', 'endDate', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy', 'revision'])",
+            "startDate": {
+              ".validate": "newData.isString() && newData.val().length === 10"
+            },
+            "endDate": {
+              ".validate": "newData.isString() && newData.val().length === 10 && newData.val() >= newData.parent().child('startDate').val()"
+            },
+            "createdAt": {
+              ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || (data.exists() && newData.val() === data.val()))"
+            },
+            "createdBy": {
+              ".validate": "newData.isString() && ((!data.exists() && newData.val() === auth.uid) || (data.exists() && newData.val() === data.val()))"
+            },
+            "updatedAt": {
+              ".validate": "newData.isNumber() && newData.val() === now"
+            },
+            "updatedBy": {
+              ".validate": "newData.isString() && newData.val() === auth.uid"
+            },
+            "revision": {
+              ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 1) || (data.exists() && newData.val() === data.val() + 1))"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
         },
         "presence": {
           ".write": false

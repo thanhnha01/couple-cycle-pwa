@@ -328,3 +328,27 @@ describe("cross-couple authorization", () => {
     await assertSucceeds(userA.ref(`couples/${OWNER_A.uid}/profile`).once("value"));
   });
 });
+
+describe("shared period permissions", () => {
+  const periodValue = (uid: string) => ({
+    startDate: "2026-09-09",
+    endDate: "2026-09-13",
+    createdAt: serverTimestamp,
+    createdBy: uid,
+    updatedAt: serverTimestamp,
+    updatedBy: uid,
+    revision: 1,
+  });
+
+  it("allows both members to create, read, update, and delete periods while denying outsiders", async () => {
+    await createCouple(OWNER_A);
+    await redeem(JOINER_B, OWNER_A.uid, TOKEN_A);
+    const path = `couples/${OWNER_A.uid}/periods/p1`;
+    await assertSucceeds(databaseFor(OWNER_A).ref(path).set(periodValue(OWNER_A.uid)));
+    await assertSucceeds(databaseFor(JOINER_B).ref(path).once("value"));
+    await assertSucceeds(databaseFor(JOINER_B).ref(path).update({ updatedAt: serverTimestamp, updatedBy: JOINER_B.uid, revision: 2 }));
+    await assertSucceeds(databaseFor(JOINER_B).ref(path).remove());
+    await assertFails(databaseFor(OUTSIDER).ref(`couples/${OWNER_A.uid}/periods/p2`).set(periodValue(OUTSIDER.uid)));
+    await assertFails(databaseFor(OUTSIDER).ref(`couples/${OWNER_A.uid}/periods`).once("value"));
+  });
+});

@@ -7,7 +7,10 @@ import { FirebaseCoupleRepository } from "../couple/firebaseCoupleRepository";
 import { CoupleService } from "../couple/service";
 import { CoupleSessionStore } from "../couple/session";
 import type { CoupleMembership, InviteDetails } from "../couple/types";
+import type { Period } from "../cycle/types";
 import { isFirebaseConfigured } from "../firebase/config";
+import { FirebasePeriodRepository } from "../periods/firebasePeriodRepository";
+import { PeriodService } from "../periods/service";
 import { setupPwa } from "../pwa/setupPwa";
 import { renderApplication } from "../ui/renderApplication";
 import { guardedDestination } from "./routeGuards";
@@ -23,13 +26,33 @@ export async function bootstrapApplication(): Promise<void> {
     : new UnavailableAuthService();
   const authSession = new AuthSessionStore(auth);
   const couples = new CoupleService(new FirebaseCoupleRepository());
+  const periodService = new PeriodService(new FirebasePeriodRepository());
   const coupleSession = new CoupleSessionStore(couples);
   let currentRoute: AppRoute = routes[0]!;
   let loadedUid: string | undefined;
   let currentInvite: InviteDetails | undefined;
   let inviteLoading = false;
+  let periods: Period[] = [];
+  let periodsLoading = false;
+  let periodsError = false;
+  let loadedPeriodsCoupleId: string | undefined;
 
   let router: ReturnType<typeof createRouter>;
+  const refreshPeriods = async (): Promise<void> => {
+    if (coupleSession.snapshot.status !== "linked") return;
+    periodsLoading = true;
+    periodsError = false;
+    render();
+    try {
+      periods = await periodService.list(coupleSession.snapshot.membership.coupleId);
+      loadedPeriodsCoupleId = coupleSession.snapshot.membership.coupleId;
+    } catch {
+      periodsError = true;
+    } finally {
+      periodsLoading = false;
+      render();
+    }
+  };
   const render = (): void => {
     rememberInviteRoute(currentRoute);
     if (authSession.snapshot.status !== "initializing") {
@@ -55,6 +78,10 @@ export async function bootstrapApplication(): Promise<void> {
         .finally(() => { inviteLoading = false; render(); });
     }
 
+    if (currentRoute.path === "/calendar" && coupleSession.snapshot.status === "linked" && loadedPeriodsCoupleId !== coupleSession.snapshot.membership.coupleId && !periodsLoading) {
+      void refreshPeriods();
+    }
+
     renderApplication(root, currentRoute, {
       auth,
       couples,
@@ -72,6 +99,12 @@ export async function bootstrapApplication(): Promise<void> {
         currentInvite = invite;
         render();
       },
+      periods,
+      periodsLoading,
+      periodsError,
+      periodService,
+      refreshPeriods,
+      rerender: render,
     });
   };
 
@@ -87,6 +120,8 @@ export async function bootstrapApplication(): Promise<void> {
     if (state.status === "authenticated" && loadedUid !== state.user.uid) {
       loadedUid = state.user.uid;
       currentInvite = undefined;
+      periods = [];
+      loadedPeriodsCoupleId = undefined;
       void coupleSession.load(state.user.uid);
     } else if (state.status !== "authenticated" && loadedUid) {
       loadedUid = undefined;

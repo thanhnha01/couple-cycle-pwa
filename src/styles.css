@@ -112,3 +112,32 @@ button:disabled { cursor: wait; opacity: .65; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+.calendar-page { display: grid; gap: 1rem; padding-top: 1.25rem; }
+.calendar-header, .calendar-month-controls, .period-history > div { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.calendar-header h1 { font-size: 2rem; }
+.calendar-header .eyebrow { margin-bottom: .25rem; }
+.calendar-surface, .today-summary, .period-history { border: 1px solid var(--border); border-radius: 1.2rem; background: var(--surface); padding: 1rem; }
+.calendar-month-controls h2 { margin: 0; font-size: 1rem; }
+.calendar-month-controls > button { display: grid; width: 44px; min-height: 44px; place-items: center; border: 0; border-radius: .75rem; background: var(--surface-muted); color: var(--accent-strong); font-size: 1.5rem; cursor: pointer; }
+.calendar-weekdays, .calendar-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.calendar-cell { min-width: 0; }
+.calendar-weekdays { margin-top: .5rem; color: var(--text-muted); font-size: .72rem; font-weight: 800; text-align: center; }
+.calendar-weekdays span { padding: .55rem 0; }
+.calendar-day { position: relative; display: grid; width: 100%; aspect-ratio: 1; min-height: 44px; place-items: center; border: 0; border-radius: .65rem; background: transparent; color: inherit; cursor: pointer; }
+.calendar-day.outside-month { color: #ad98a0; }
+.calendar-day.actual-period { background: var(--accent); color: #fff; }
+.calendar-day.predicted-period { box-shadow: inset 0 0 0 2px #c58ea1; color: var(--accent-strong); }
+.calendar-day.actual-period.predicted-period { box-shadow: none; color: #fff; }
+.calendar-day.expected-period::after { position: absolute; right: .3rem; bottom: .3rem; width: .32rem; height: .32rem; border-radius: 50%; background: currentColor; content: ""; }
+.calendar-day.today { outline: 2px solid var(--focus); outline-offset: -2px; }
+.calendar-day.selected { outline: 3px solid #34232a; outline-offset: -4px; }
+.calendar-day:focus-visible { z-index: 1; outline: 3px solid var(--focus); outline-offset: 2px; }
+.calendar-legend { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin: .9rem 0 0; color: var(--text-muted); font-size: .78rem; }
+.calendar-legend span::before { display: inline-block; width: .65rem; height: .65rem; margin-right: .3rem; border-radius: .2rem; content: ""; vertical-align: -.05rem; }
+.legend-actual::before { background: var(--accent); }.legend-predicted::before { border: 2px solid #c58ea1; }.legend-expected::before { width: .38rem !important; height: .38rem !important; border-radius: 50% !important; background: var(--accent-strong); }.legend-today::before { border: 2px solid var(--focus); }
+.today-summary h2, .period-history h2 { margin: 0; font-size: 1.05rem; }.today-summary p { margin: .6rem 0 0; color: var(--text-muted); line-height: 1.5; }
+.period-history ul { display: grid; gap: .5rem; margin: .85rem 0 0; padding: 0; list-style: none; }.period-history li button { display: flex; width: 100%; min-height: 48px; align-items: center; justify-content: space-between; gap: .75rem; border: 0; border-radius: .75rem; background: var(--surface-muted); padding: .7rem; color: inherit; text-align: left; cursor: pointer; }.period-history li span { color: var(--text-muted); font-size: .8rem; }
+.text-button, .danger-button { min-height: 44px; border: 0; border-radius: .7rem; background: transparent; color: var(--accent-strong); font-weight: 800; cursor: pointer; }.danger-button { width: 100%; background: #fff0f2; color: var(--danger); }
+.period-sheet { position: fixed; z-index: 30; right: 0; bottom: 0; left: 0; border-radius: 1.35rem 1.35rem 0 0; background: var(--surface); box-shadow: 0 -12px 35px rgb(77 42 55 / 18%); padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom)); }.sheet-handle { width: 2.75rem; height: .3rem; margin: 0 auto .8rem; border-radius: 999px; background: var(--border); }.period-sheet h2 { margin: 0 0 1rem; font-size: 1.2rem; }.period-sheet form { display: grid; gap: .8rem; }.period-sheet label { display: grid; gap: .35rem; font-weight: 750; }.period-sheet input { min-height: 48px; border: 1px solid #bcaab1; border-radius: .75rem; padding: .7rem; }.undo-bar { position: fixed; z-index: 40; right: 1rem; bottom: 5.8rem; left: 1rem; display: flex; align-items: center; justify-content: space-between; border-radius: 1rem; background: #34232a; color: #fff; padding: .75rem 1rem; box-shadow: var(--shadow); }.undo-bar button { min-height: 44px; border: 0; border-radius: .65rem; background: #fff; color: var(--accent-strong); padding: .5rem .75rem; font-weight: 800; }
+@media (min-width: 48rem) { .calendar-page { width: min(56rem, 100%); grid-template-columns: minmax(0, 1.3fr) minmax(16rem, .7fr); align-items: start; }.calendar-header, .calendar-surface { grid-column: 1; }.today-summary, .period-history { grid-column: 2; }.period-history { grid-row: 1 / span 2; margin-top: 6.2rem; }.period-sheet { right: max(1rem, calc((100vw - 56rem) / 2)); left: auto; width: min(26rem, calc(100vw - 2rem)); border-radius: 1.35rem; bottom: 1rem; }.undo-bar { right: 1rem; bottom: 1rem; left: auto; width: 22rem; } }

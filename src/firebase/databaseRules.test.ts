@@ -27,4 +27,11 @@ describe("Realtime Database rule posture", () => {
     expect(rules.rules.couples.$coupleId[".write"]).toContain("inviteClaims");
     expect(rules.rules.couples.$coupleId.profile.memberCount[".validate"]).toContain("newData.val() === 2");
   });
+
+  it("grants period access only to couple members and validates period revisions", () => {
+    const periods = rules.rules.couples.$coupleId.periods;
+    expect(periods[".read"]).toContain("members");
+    expect(periods.$periodId[".write"]).toContain("members");
+    expect(periods.$periodId.revision[".validate"]).toContain("data.val() + 1");
+  });
 });

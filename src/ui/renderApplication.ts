@@ -8,6 +8,9 @@ import type { CoupleApplicationService } from "../couple/contracts";
 import { CoupleError } from "../couple/errors";
 import type { CoupleSessionState } from "../couple/session";
 import type { CoupleMembership, InviteDetails } from "../couple/types";
+import { bindCalendarPage, renderCalendarPage } from "../calendar/calendarPage";
+import type { Period } from "../cycle/types";
+import type { PeriodService } from "../periods/service";
 
 interface RenderContext {
   auth: AuthenticationService;
@@ -20,6 +23,12 @@ interface RenderContext {
   navigate: (path: string) => void;
   setMembership: (membership: CoupleMembership, invite?: InviteDetails) => void;
   setInvite: (invite: InviteDetails) => void;
+  periods: readonly Period[];
+  periodsLoading: boolean;
+  periodsError: boolean;
+  periodService: PeriodService;
+  refreshPeriods: () => Promise<void>;
+  rerender: () => void;
 }
 
 const primaryNavigation: readonly [RoutePath, string][] = [
@@ -193,6 +202,11 @@ function renderProtectedRoute(root: HTMLElement, route: AppRoute, context: Rende
     .map(([path, label]) => `<a data-route href="${routeHref(path)}" ${route.path === path ? 'aria-current="page"' : ""}>${label}</a>`)
     .join("");
   const membership = context.coupleSession.status === "linked" ? context.coupleSession.membership : undefined;
+  if (route.path === "/calendar" && membership && context.authSession.status === "authenticated") {
+    root.innerHTML = shell(`<main class="page">${renderCalendarPage({ periods: context.periods, loading: context.periodsLoading, error: context.periodsError, coupleId: membership.coupleId, uid: context.authSession.user.uid, service: context.periodService, refresh: context.refreshPeriods, rerender: context.rerender })}</main><nav class="bottom-nav" aria-label="Primary navigation">${navigation}</nav>`);
+    bindCalendarPage(root, { periods: context.periods, loading: context.periodsLoading, error: context.periodsError, coupleId: membership.coupleId, uid: context.authSession.user.uid, service: context.periodService, refresh: context.refreshPeriods, rerender: context.rerender });
+    return;
+  }
   const sharedSummary = route.path === "/home" && membership
     ? `<div class="shared-summary"><span class="role-badge">${membership.member.role}</span><strong>${escapeHtml(membership.profile.name)}</strong><span>Your private space is connected.</span></div>`
     : "";

@@ -6,9 +6,11 @@ export interface Period {
   coupleId: string;
   startDate: CalendarDate;
   endDate?: CalendarDate;
-  notes?: string;
   createdAt: Timestamp;
+  createdBy: string;
   updatedAt: Timestamp;
+  updatedBy: string;
+  revision: number;
 }
 
 export type ConfidenceLevel = "insufficient" | "low" | "moderate" | "high";

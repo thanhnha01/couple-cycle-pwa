@@ -1,0 +1,79 @@
+import { get, ref, remove, runTransaction, serverTimestamp, set, type DataSnapshot } from "firebase/database";
+import type { Period } from "../cycle/types";
+import { getFirebaseDatabase } from "../firebase/database";
+import { calendarDate, timestamp } from "../utils/date";
+import type { PeriodInput, PeriodRepository } from "./types";
+
+export class FirebasePeriodRepository implements PeriodRepository {
+  async list(coupleId: string): Promise<Period[]> {
+    const snapshot = await get(ref(getFirebaseDatabase(), `couples/${coupleId}/periods`));
+    const records: Period[] = [];
+    snapshot.forEach((child) => { records.push(parsePeriod(coupleId, child)); });
+    return records.sort((left, right) => right.startDate.localeCompare(left.startDate) || right.id.localeCompare(left.id));
+  }
+
+  async create(period: Period): Promise<void> {
+    await set(ref(getFirebaseDatabase(), `couples/${period.coupleId}/periods/${period.id}`), {
+      startDate: period.startDate,
+      endDate: period.endDate,
+      createdAt: serverTimestamp(),
+      createdBy: period.createdBy,
+      updatedAt: serverTimestamp(),
+      updatedBy: period.updatedBy,
+      revision: 1,
+    });
+  }
+
+  async update(coupleId: string, periodId: string, input: PeriodInput, expectedRevision: number, updatedBy: string): Promise<Period> {
+    const target = ref(getFirebaseDatabase(), `couples/${coupleId}/periods/${periodId}`);
+    const result = await runTransaction(target, (current: unknown) => {
+      if (!isStoredPeriod(current) || current.revision !== expectedRevision) return;
+      return {
+        ...current,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        updatedAt: serverTimestamp(),
+        updatedBy,
+        revision: expectedRevision + 1,
+      };
+    });
+    if (!result.committed) throw new Error("This period changed on another device. Reload and try again.");
+    return parsePeriod(coupleId, result.snapshot);
+  }
+
+  async remove(coupleId: string, periodId: string): Promise<void> {
+    await remove(ref(getFirebaseDatabase(), `couples/${coupleId}/periods/${periodId}`));
+  }
+}
+
+interface StoredPeriod {
+  startDate: unknown;
+  endDate: unknown;
+  createdAt: unknown;
+  createdBy: unknown;
+  updatedAt: unknown;
+  updatedBy: unknown;
+  revision: unknown;
+}
+
+function isStoredPeriod(value: unknown): value is StoredPeriod {
+  return typeof value === "object" && value !== null && "revision" in value;
+}
+
+function parsePeriod(coupleId: string, snapshot: DataSnapshot): Period {
+  const value = snapshot.val() as StoredPeriod | null;
+  if (!value || typeof value.startDate !== "string" || typeof value.endDate !== "string" || typeof value.createdAt !== "number" || typeof value.createdBy !== "string" || typeof value.updatedAt !== "number" || typeof value.updatedBy !== "string" || typeof value.revision !== "number") {
+    throw new Error("A stored period is invalid.");
+  }
+  return {
+    id: snapshot.key ?? "",
+    coupleId,
+    startDate: calendarDate(value.startDate),
+    endDate: calendarDate(value.endDate),
+    createdAt: timestamp(value.createdAt),
+    createdBy: value.createdBy,
+    updatedAt: timestamp(value.updatedAt),
+    updatedBy: value.updatedBy,
+    revision: value.revision,
+  };
+}
