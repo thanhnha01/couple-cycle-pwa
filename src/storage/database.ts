@@ -1,5 +1,6 @@
 export const DATABASE_NAME = "couple-cycle";
-export const DATABASE_VERSION = 1;
+export const DATABASE_VERSION = 2;
+const LEGACY_CYCLE_PREDICTIONS_STORE = "cyclePredictions";
 
 export const STORE_NAMES = [
   "users",
@@ -9,7 +10,6 @@ export const STORE_NAMES = [
   "invites",
   "presence",
   "syncOperations",
-  "cyclePredictions",
 ] as const;
 
 export type StoreName = (typeof STORE_NAMES)[number];
@@ -23,6 +23,11 @@ export function openDatabase(): Promise<IDBDatabase> {
 
       request.addEventListener("upgradeneeded", () => {
         const database = request.result;
+        // V2 predictions are derived client-side and are no longer persisted.
+        // This removes only the obsolete derived-data store from existing installs.
+        if (database.objectStoreNames.contains(LEGACY_CYCLE_PREDICTIONS_STORE)) {
+          database.deleteObjectStore(LEGACY_CYCLE_PREDICTIONS_STORE);
+        }
         for (const storeName of STORE_NAMES) {
           if (!database.objectStoreNames.contains(storeName)) {
             database.createObjectStore(storeName, { keyPath: "id" });
