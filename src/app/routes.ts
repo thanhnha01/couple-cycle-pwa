@@ -3,6 +3,7 @@ export const routePaths = [
   "/register",
   "/forgot-password",
   "/onboarding",
+  "/invite",
   "/home",
   "/calendar",
   "/insights",
@@ -22,7 +23,8 @@ export const routes: readonly AppRoute[] = [
   { path: "/login", title: "Welcome back", eyebrow: "Account", description: "Sign in securely to continue." },
   { path: "/register", title: "Create an account", eyebrow: "Account", description: "Create your private Couple Cycle account." },
   { path: "/forgot-password", title: "Reset your password", eyebrow: "Account", description: "Request a secure password reset link." },
-  { path: "/onboarding", title: "Set up your shared space", eyebrow: "Getting started", description: "Couple invitations and joining will be implemented in a later phase." },
+  { path: "/onboarding", title: "Set up your shared space", eyebrow: "Getting started", description: "Create a private couple or securely accept your partner’s invitation." },
+  { path: "/invite", title: "Invite your partner", eyebrow: "Private invitation", description: "Share this one-time link only with your partner." },
   { path: "/home", title: "Your cycle, together", eyebrow: "Today", description: "A calm shared overview will live here once cycle data is available." },
   { path: "/calendar", title: "Calendar", eyebrow: "Cycle", description: "Calendar tracking is intentionally not implemented in this foundation." },
   { path: "/insights", title: "Insights", eyebrow: "Patterns", description: "Predictions and insights will appear here after the domain logic is built." },
@@ -30,4 +32,4 @@ export const routes: readonly AppRoute[] = [
 ];
 
 export const publicAuthPaths: readonly RoutePath[] = ["/login", "/register", "/forgot-password"];
-export const protectedPaths: readonly RoutePath[] = ["/onboarding", "/home", "/calendar", "/insights", "/settings"];
+export const protectedPaths: readonly RoutePath[] = ["/onboarding", "/invite", "/home", "/calendar", "/insights", "/settings"];

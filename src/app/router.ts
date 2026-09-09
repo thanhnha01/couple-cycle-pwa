@@ -45,7 +45,8 @@ export function createRouter({ routes, onRouteChange }: RouterOptions): Router {
 
   return {
     navigate(path: string): void {
-      const destination = `#${resolve(path).path}`;
+      const routePath = pathFromHash(path);
+      const destination = `#${resolve(routePath).path}${queryFromPath(path)}`;
       if (window.location.hash === destination) renderCurrentRoute();
       else window.location.hash = destination;
     },
@@ -63,5 +64,16 @@ export function createRouter({ routes, onRouteChange }: RouterOptions): Router {
 
 export function pathFromHash(hash: string): string {
   const value = hash.startsWith("#") ? hash.slice(1) : hash;
-  return value.startsWith("/") ? value : "/";
+  const path = value.split("?", 1)[0] ?? "";
+  return path.startsWith("/") ? path : "/";
+}
+
+function queryFromPath(path: string): string {
+  const queryIndex = path.indexOf("?");
+  return queryIndex >= 0 ? path.slice(queryIndex) : "";
+}
+
+export function queryFromHash(hash: string): URLSearchParams {
+  const queryIndex = hash.indexOf("?");
+  return new URLSearchParams(queryIndex >= 0 ? hash.slice(queryIndex + 1) : "");
 }

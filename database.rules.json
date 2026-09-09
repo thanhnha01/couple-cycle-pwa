@@ -5,8 +5,8 @@
     "users": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid",
         "profile": {
+          ".write": "auth != null && auth.uid === $uid",
           ".validate": "newData.hasChildren(['displayName', 'email', 'createdAt', 'updatedAt'])",
           "displayName": {
             ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 80"
@@ -23,6 +23,139 @@
           "$other": {
             ".validate": false
           }
+        },
+        "coupleId": {
+          ".write": "auth != null && auth.uid === $uid && newData.isString() && (!data.exists() || data.val() === newData.val()) && root.child('couples').child(newData.val()).child('members').child(auth.uid).exists()",
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "couples": {
+      "$coupleId": {
+        ".read": "auth != null && (root.child('couples').child($coupleId).child('members').child(auth.uid).exists() || $coupleId === auth.uid)",
+        ".write": "auth != null && ((!data.exists() && $coupleId === auth.uid && !root.child('users').child(auth.uid).child('coupleId').exists() && newData.child('profile').child('ownerUid').val() === auth.uid && newData.child('profile').child('memberCount').val() === 1 && newData.child('members').child(auth.uid).child('role').val() === 'owner' && newData.child('invite').child('active').val() === true) || (data.exists() && !data.child('members').child(auth.uid).exists() && !root.child('users').child(auth.uid).child('coupleId').exists() && data.child('profile').child('memberCount').val() === 1 && data.child('members').child($coupleId).child('role').val() === 'owner' && root.child('inviteClaims').child(auth.uid).child('coupleId').val() === $coupleId && root.child('inviteClaims').child(auth.uid).child('code').val() === data.child('invite').child('code').val() && data.child('invite').child('active').val() === true && data.child('invite').child('expiresAt').val() > now && newData.child('profile').child('name').val() === data.child('profile').child('name').val() && newData.child('profile').child('createdAt').val() === data.child('profile').child('createdAt').val() && newData.child('profile').child('ownerUid').val() === data.child('profile').child('ownerUid').val() && newData.child('profile').child('memberCount').val() === 2 && newData.child('members').child($coupleId).child('role').val() === data.child('members').child($coupleId).child('role').val() && newData.child('members').child($coupleId).child('joinedAt').val() === data.child('members').child($coupleId).child('joinedAt').val() && newData.child('members').child(auth.uid).child('role').val() === 'member' && newData.child('members').child(auth.uid).child('joinedAt').val() === now && newData.child('invite').child('active').val() === false && newData.child('invite').child('code').val() === data.child('invite').child('code').val() && newData.child('invite').child('createdAt').val() === data.child('invite').child('createdAt').val() && newData.child('invite').child('expiresAt').val() === data.child('invite').child('expiresAt').val() && newData.child('invite').child('redeemedBy').val() === auth.uid && newData.child('invite').child('redeemedAt').val() === now && newData.child('invite').child('redemptionProof').val() === data.child('invite').child('code').val()))",
+        ".validate": "newData.hasChildren(['profile', 'members', 'invite']) && (newData.child('profile').child('memberCount').val() === 1 || newData.child('profile').child('memberCount').val() === 2)",
+        "profile": {
+          ".validate": "newData.hasChildren(['name', 'createdAt', 'ownerUid', 'memberCount'])",
+          "name": {
+            ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 60"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())"
+          },
+          "ownerUid": {
+            ".validate": "newData.isString() && ((!data.exists() && newData.val() === auth.uid) || newData.val() === data.val())"
+          },
+          "memberCount": {
+            ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 1) || (data.val() === 1 && newData.val() === 2) || newData.val() === data.val())"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "members": {
+          "$memberUid": {
+            ".validate": "newData.hasChildren(['role', 'joinedAt'])",
+            "role": {
+              ".validate": "newData.isString() && ((data.exists() && newData.val() === data.val()) || (!data.exists() && ((!root.child('couples').child($coupleId).exists() && $coupleId === auth.uid && $memberUid === auth.uid && newData.val() === 'owner') || (root.child('couples').child($coupleId).exists() && $memberUid === auth.uid && newData.val() === 'member'))))"
+            },
+            "joinedAt": {
+              ".validate": "newData.isNumber() && ((data.exists() && newData.val() === data.val()) || (!data.exists() && newData.val() === now))"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "invite": {
+          ".write": "auth != null && data.exists() && root.child('couples').child($coupleId).child('members').child(auth.uid).child('role').val() === 'owner' && data.child('active').val() === true && newData.child('active').val() === true && newData.child('code').val() !== data.child('code').val() && newData.child('createdAt').val() === now && newData.child('expiresAt').val() > now && newData.child('expiresAt').val() <= now + 604800000",
+          ".validate": "(newData.child('active').val() === true && newData.hasChildren(['code', 'active', 'createdAt', 'expiresAt']) && !newData.child('redeemedBy').exists() && !newData.child('redeemedAt').exists() && !newData.child('redemptionProof').exists()) || (newData.child('active').val() === false && newData.hasChildren(['code', 'active', 'createdAt', 'expiresAt', 'redeemedBy', 'redeemedAt', 'redemptionProof']))",
+          "code": {
+            ".validate": "newData.isString() && newData.val().length === 43"
+          },
+          "active": {
+            ".validate": "newData.isBoolean()"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val() || newData.val() === now)"
+          },
+          "expiresAt": {
+            ".validate": "newData.isNumber() && newData.val() > newData.parent().child('createdAt').val() && newData.val() <= newData.parent().child('createdAt').val() + 604800000"
+          },
+          "redeemedBy": {
+            ".validate": "newData.isString() && newData.val() === auth.uid"
+          },
+          "redeemedAt": {
+            ".validate": "newData.isNumber() && newData.val() === now"
+          },
+          "redemptionProof": {
+            ".validate": "newData.isString() && newData.val() === newData.parent().child('code').val()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "periods": {
+          ".write": false
+        },
+        "presence": {
+          ".write": false
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "inviteLookups": {
+      "$code": {
+        ".read": "auth != null && $code.length === 43",
+        ".write": "auth != null && $code.length === 43 && ((!data.exists() && newData.child('active').val() === true && ((newData.child('coupleId').val() === auth.uid && !root.child('couples').child(auth.uid).exists() && !root.child('users').child(auth.uid).child('coupleId').exists()) || root.child('couples').child(newData.child('coupleId').val()).child('members').child(auth.uid).child('role').val() === 'owner')) || (data.child('active').val() === true && newData.child('active').val() === false && newData.child('coupleId').val() === data.child('coupleId').val() && newData.child('createdAt').val() === data.child('createdAt').val() && newData.child('expiresAt').val() === data.child('expiresAt').val() && ((root.child('couples').child(data.child('coupleId').val()).child('invite').child('code').val() === $code && root.child('couples').child(data.child('coupleId').val()).child('invite').child('active').val() === false && root.child('couples').child(data.child('coupleId').val()).child('invite').child('redeemedBy').val() === auth.uid && newData.child('redeemedBy').val() === auth.uid && newData.child('redeemedAt').val() === root.child('couples').child(data.child('coupleId').val()).child('invite').child('redeemedAt').val()) || (root.child('couples').child(data.child('coupleId').val()).child('members').child(auth.uid).child('role').val() === 'owner' && root.child('couples').child(data.child('coupleId').val()).child('invite').child('code').val() === $code && newData.child('invalidatedBy').val() === auth.uid && newData.child('invalidatedAt').val() === now))))",
+        ".validate": "(newData.child('active').val() === true && newData.hasChildren(['coupleId', 'active', 'createdAt', 'expiresAt']) && !newData.child('redeemedBy').exists() && !newData.child('redeemedAt').exists() && !newData.child('invalidatedBy').exists() && !newData.child('invalidatedAt').exists()) || (newData.child('active').val() === false && ((newData.hasChildren(['coupleId', 'active', 'createdAt', 'expiresAt', 'redeemedBy', 'redeemedAt']) && !newData.child('invalidatedBy').exists() && !newData.child('invalidatedAt').exists()) || (newData.hasChildren(['coupleId', 'active', 'createdAt', 'expiresAt', 'invalidatedBy', 'invalidatedAt']) && !newData.child('redeemedBy').exists() && !newData.child('redeemedAt').exists())))",
+        "coupleId": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128"
+        },
+        "active": {
+          ".validate": "newData.isBoolean()"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())"
+        },
+        "expiresAt": {
+          ".validate": "newData.isNumber() && newData.val() > newData.parent().child('createdAt').val() && newData.val() <= newData.parent().child('createdAt').val() + 604800000"
+        },
+        "redeemedBy": {
+          ".validate": "newData.isString() && newData.val() === auth.uid"
+        },
+        "redeemedAt": {
+          ".validate": "newData.isNumber() && (newData.val() === now || newData.val() === root.child('couples').child(newData.parent().child('coupleId').val()).child('invite').child('redeemedAt').val())"
+        },
+        "invalidatedBy": {
+          ".validate": "newData.isString() && newData.val() === auth.uid"
+        },
+        "invalidatedAt": {
+          ".validate": "newData.isNumber() && newData.val() === now"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "inviteClaims": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid && (!newData.exists() || (!root.child('users').child(auth.uid).child('coupleId').exists() && !root.child('couples').child(newData.child('coupleId').val()).child('members').child(auth.uid).exists() && root.child('inviteLookups').child(newData.child('code').val()).child('coupleId').val() === newData.child('coupleId').val() && root.child('inviteLookups').child(newData.child('code').val()).child('active').val() === true && root.child('inviteLookups').child(newData.child('code').val()).child('expiresAt').val() > now && root.child('couples').child(newData.child('coupleId').val()).child('invite').child('code').val() === newData.child('code').val() && root.child('couples').child(newData.child('coupleId').val()).child('invite').child('active').val() === true && root.child('couples').child(newData.child('coupleId').val()).child('invite').child('expiresAt').val() > now))",
+        ".validate": "newData.hasChildren(['coupleId', 'code', 'createdAt'])",
+        "coupleId": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128"
+        },
+        "code": {
+          ".validate": "newData.isString() && newData.val().length === 43"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber() && newData.val() === now"
         },
         "$other": {
           ".validate": false

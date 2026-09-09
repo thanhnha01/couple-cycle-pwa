@@ -2,16 +2,29 @@ import { describe, expect, it } from "vitest";
 import rules from "../../database.rules.json";
 
 describe("Realtime Database rule posture", () => {
-  it("denies access by default and scopes user access to auth.uid", () => {
+  it("denies access by default and scopes user data to auth.uid", () => {
     expect(rules.rules[".read"]).toBe(false);
     expect(rules.rules[".write"]).toBe(false);
     expect(rules.rules.users.$uid[".read"]).toContain("auth.uid === $uid");
-    expect(rules.rules.users.$uid[".write"]).toContain("auth.uid === $uid");
+    expect(rules.rules.users.$uid.profile[".write"]).toContain("auth.uid === $uid");
+    expect(rules.rules.users.$uid.coupleId[".write"]).toContain("members");
   });
 
   it("rejects unknown profile fields and uses server-time validation", () => {
     expect(rules.rules.users.$uid.profile.$other[".validate"]).toBe(false);
     expect(rules.rules.users.$uid.profile.createdAt[".validate"]).toContain("now");
     expect(rules.rules.users.$uid.profile.updatedAt[".validate"]).toContain("now");
+  });
+
+  it("uses membership for couple reads and owner state for invite management", () => {
+    expect(rules.rules.couples.$coupleId[".read"]).toContain("members");
+    expect(rules.rules.couples.$coupleId.invite[".write"]).toContain("'owner'");
+    expect(rules.rules.couples.$coupleId.members.$memberUid.role[".validate"]).toContain("'member'");
+  });
+
+  it("caps membership and requires an invite claim for joining", () => {
+    expect(rules.rules.couples.$coupleId[".write"]).toContain("memberCount");
+    expect(rules.rules.couples.$coupleId[".write"]).toContain("inviteClaims");
+    expect(rules.rules.couples.$coupleId.profile.memberCount[".validate"]).toContain("newData.val() === 2");
   });
 });
