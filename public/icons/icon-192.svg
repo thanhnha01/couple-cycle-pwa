@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" role="img" aria-label="Couple Cycle placeholder icon">
+  <rect width="192" height="192" rx="48" fill="#8c3f5d"/>
+  <circle cx="96" cy="96" r="56" fill="none" stroke="#fff9fb" stroke-width="14" stroke-dasharray="260 92" stroke-linecap="round"/>
+  <circle cx="76" cy="91" r="9" fill="#fff9fb"/>
+  <circle cx="116" cy="91" r="9" fill="#fff9fb"/>
+  <path d="M70 119c15 14 37 14 52 0" fill="none" stroke="#fff9fb" stroke-width="10" stroke-linecap="round"/>
+</svg>
