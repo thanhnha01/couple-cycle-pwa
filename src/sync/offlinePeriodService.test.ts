@@ -74,4 +74,29 @@ describe("OfflinePeriodService", () => {
     expect(Number(store.operations[0]?.nextRetryAt)).toBe(1001);
     service.dispose();
   });
+
+  it("recovers an interrupted processing operation and removes remotely deleted cached records", async () => {
+    const store = new MemoryStore(); const remote = new Remote();
+    const period: Period = { id: "p", coupleId: "c", ...input, createdAt: timestamp(1), createdBy: "u", updatedAt: timestamp(1), updatedBy: "u", revision: 1 };
+    store.periods = [period];
+    store.operations = [{ id: "period:p:create:1", coupleId: "c", uid: "u", entityType: "period", entityId: "p", action: "create", payload: period, status: "processing", attempts: 1, createdAt: timestamp(1), updatedAt: timestamp(1) }];
+    const service = new OfflinePeriodService({ store, remote, isOnline: () => true, now: () => 2 });
+    await service.restore("c");
+    expect(service.snapshot().operations[0]?.status).toBe("pending");
+    await service.replay();
+    expect(remote.periods.has("p")).toBe(true);
+    await service.applyRemote([]);
+    expect(service.snapshot().periods).toHaveLength(0);
+    expect(store.periods).toHaveLength(0);
+  });
+
+  it("clears in-memory state when the authenticated account changes", async () => {
+    const store = new MemoryStore(); const service = new OfflinePeriodService({ store, isOnline: () => true });
+    await service.create("c", "u", input, []);
+    service.reset();
+    expect(service.snapshot().periods).toHaveLength(0);
+    expect(service.snapshot().operations).toHaveLength(0);
+    // Durable data is retained only under its original couple partition for a future authorized restore.
+    expect(store.periods).toHaveLength(1);
+  });
 });

@@ -56,6 +56,16 @@ export async function bootstrapApplication(): Promise<void> {
   let activeCoupleId: string | undefined;
 
   let router: ReturnType<typeof createRouter>;
+  const resetActiveCouple = (): void => {
+    stopRealtime?.();
+    stopRealtime = undefined;
+    activeCoupleId = undefined;
+    presence = [];
+    periods = [];
+    loadedPeriodsCoupleId = undefined;
+    coupleSession.reset();
+    periodService.reset();
+  };
   const refreshPeriods = async (): Promise<void> => {
     if (coupleSession.snapshot.status !== "linked") return;
     periodsLoading = true;
@@ -140,19 +150,19 @@ export async function bootstrapApplication(): Promise<void> {
 
   authSession.subscribe((state) => {
     if (state.status === "authenticated" && loadedUid !== state.user.uid) {
+      resetActiveCouple();
       loadedUid = state.user.uid;
       currentInvite = undefined;
-      periods = [];
-      loadedPeriodsCoupleId = undefined;
-      void restoreCachedMembership(state.user.uid, repositories).then((cached) => {
+      const requestedUid = state.user.uid;
+      void restoreCachedMembership(requestedUid, repositories).then((cached) => {
+        if (loadedUid !== requestedUid) return;
         if (cached) coupleSession.setMembership(cached);
-        return coupleSession.load(state.user.uid);
+        return coupleSession.load(requestedUid);
       });
     } else if (state.status !== "authenticated" && loadedUid) {
       loadedUid = undefined;
       currentInvite = undefined;
-      coupleSession.reset();
-      stopRealtime?.(); stopRealtime = undefined; activeCoupleId = undefined; presence = []; periodService.dispose();
+      resetActiveCouple();
     }
     render();
   });

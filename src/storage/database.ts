@@ -47,7 +47,10 @@ export function openDatabase(): Promise<IDBDatabase> {
 
       request.addEventListener("success", () => {
         const database = request.result;
-        database.addEventListener("versionchange", () => database.close());
+        database.addEventListener("versionchange", () => {
+          database.close();
+          databasePromise = undefined;
+        });
         resolve(database);
       });
       request.addEventListener("error", () => rejectOpen(reject, request.error ?? new Error("Could not open IndexedDB.")));

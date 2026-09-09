@@ -47,12 +47,20 @@ export class OfflinePeriodService {
   private state: SyncState = "synced";
   private replaying = false;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
+  private generation = 0;
 
   constructor(private readonly options: OfflinePeriodServiceOptions) {}
 
   async restore(coupleId: string): Promise<Period[]> {
     this.periods = (await this.options.store.listPeriods(coupleId)).sort(sortPeriods);
-    this.operations = (await this.options.store.listOperations(coupleId)).filter((operation) => operation.status !== "completed").sort(order);
+    const restored = (await this.options.store.listOperations(coupleId)).filter((operation) => operation.status !== "completed");
+    // A tab can close after marking an operation processing but before the server response.
+    // Its deterministic operation id makes retrying this state safe.
+    const recovered = restored.map((operation) => operation.status === "processing"
+      ? { ...operation, status: "pending" as const, updatedAt: timestamp(this.now()), error: undefined, nextRetryAt: undefined }
+      : operation);
+    await Promise.all(recovered.filter((operation, index) => operation !== restored[index]).map((operation) => this.options.store.saveOperation(operation)));
+    this.operations = recovered.sort(order);
     this.refreshState();
     this.emit();
     return this.periods;
@@ -91,10 +99,12 @@ export class OfflinePeriodService {
   async replay(): Promise<void> {
     if (this.replaying || !this.options.remote || !this.online()) { this.refreshState(); this.emit(); return; }
     this.replaying = true;
+    const replayGeneration = this.generation;
     this.state = "syncing";
     this.emit();
     try {
       while (true) {
+        if (replayGeneration !== this.generation) break;
         const operation = this.operations.filter((item) => item.status === "pending" || item.status === "failed").sort(order)[0];
         if (!operation || !this.online()) break;
         if (operation.nextRetryAt && Number(operation.nextRetryAt) > this.now()) { this.scheduleRetry(Number(operation.nextRetryAt) - this.now()); break; }
@@ -116,12 +126,29 @@ export class OfflinePeriodService {
     const pendingEntityIds = new Set(this.operations.filter((operation) => operation.status !== "completed").map((operation) => operation.entityId));
     const localOnly = this.periods.filter((period) => pendingEntityIds.has(period.id));
     const remoteSafe = periods.filter((period) => !pendingEntityIds.has(period.id));
+    const removedRemoteIds = this.periods
+      .filter((period) => !pendingEntityIds.has(period.id) && !remoteSafe.some((remote) => remote.id === period.id))
+      .map((period) => period.id);
     this.periods = [...remoteSafe, ...localOnly].sort(sortPeriods);
-    await Promise.all(remoteSafe.map((period) => this.options.store.savePeriod(period)));
+    await Promise.all([...remoteSafe.map((period) => this.options.store.savePeriod(period)), ...removedRemoteIds.map((id) => this.options.store.removePeriod(id))]);
     this.emit();
   }
 
-  dispose(): void { if (this.retryTimer !== undefined) globalThis.clearTimeout(this.retryTimer); }
+  /** Removes another account's in-memory projection before auth state can render it. Durable records remain partitioned by couple. */
+  reset(): void {
+    this.dispose();
+    this.generation += 1;
+    this.periods = [];
+    this.operations = [];
+    this.replaying = false;
+    this.state = this.online() ? "synced" : "offline";
+    this.emit();
+  }
+
+  dispose(): void {
+    if (this.retryTimer !== undefined) globalThis.clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
+  }
 
   private async queue(period: Period | undefined, removedPeriodId: string | undefined, uid: string, action: SyncOperation["action"], revision: number, expectedRevision?: number, deleted?: Period): Promise<void> {
     const now = timestamp(this.now());

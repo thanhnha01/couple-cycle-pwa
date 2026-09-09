@@ -33,5 +33,14 @@ describe("Realtime Database rule posture", () => {
     expect(periods[".read"]).toContain("members");
     expect(periods.$periodId[".write"]).toContain("members");
     expect(periods.$periodId.revision[".validate"]).toContain("data.val() + 1");
+    expect(periods.$periodId.mutationId[".validate"]).toContain("newData.isString()");
+  });
+
+  it("isolates presence writes to the current member and requires server timestamps", () => {
+    const presence = rules.rules.couples.$coupleId.presence.$uid;
+    expect(presence[".write"]).toContain("auth.uid === $uid");
+    expect(presence[".write"]).toContain("members");
+    expect(presence.lastSeenAt[".validate"]).toContain("=== now");
+    expect(presence.updatedAt[".validate"]).toContain("=== now");
   });
 });

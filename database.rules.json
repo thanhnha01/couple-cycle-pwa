@@ -138,8 +138,8 @@
             ".write": "auth != null && auth.uid === $uid && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
             ".validate": "newData.hasChildren(['state', 'lastSeenAt', 'updatedAt'])",
             "state": { ".validate": "newData.val() === 'online' || newData.val() === 'away' || newData.val() === 'offline'" },
-            "lastSeenAt": { ".validate": "newData.isNumber()" },
-            "updatedAt": { ".validate": "newData.isNumber()" },
+            "lastSeenAt": { ".validate": "newData.isNumber() && newData.val() === now" },
+            "updatedAt": { ".validate": "newData.isNumber() && newData.val() === now" },
             "$other": { ".validate": false }
           }
         },
