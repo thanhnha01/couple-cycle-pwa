@@ -19,12 +19,15 @@ export interface AppRoute {
 }
 
 export const routes: readonly AppRoute[] = [
-  { path: "/login", title: "Welcome back", eyebrow: "Account", description: "Sign-in will be connected in the authentication phase." },
-  { path: "/register", title: "Create an account", eyebrow: "Account", description: "Registration is reserved for the authentication phase." },
-  { path: "/forgot-password", title: "Reset your password", eyebrow: "Account", description: "Password recovery will be connected with Firebase Authentication later." },
+  { path: "/login", title: "Welcome back", eyebrow: "Account", description: "Sign in securely to continue." },
+  { path: "/register", title: "Create an account", eyebrow: "Account", description: "Create your private Couple Cycle account." },
+  { path: "/forgot-password", title: "Reset your password", eyebrow: "Account", description: "Request a secure password reset link." },
   { path: "/onboarding", title: "Set up your shared space", eyebrow: "Getting started", description: "Couple invitations and joining will be implemented in a later phase." },
   { path: "/home", title: "Your cycle, together", eyebrow: "Today", description: "A calm shared overview will live here once cycle data is available." },
   { path: "/calendar", title: "Calendar", eyebrow: "Cycle", description: "Calendar tracking is intentionally not implemented in this foundation." },
   { path: "/insights", title: "Insights", eyebrow: "Patterns", description: "Predictions and insights will appear here after the domain logic is built." },
   { path: "/settings", title: "Settings", eyebrow: "Preferences", description: "Account, couple, privacy, and app preferences will be managed here." },
 ];
+
+export const publicAuthPaths: readonly RoutePath[] = ["/login", "/register", "/forgot-password"];
+export const protectedPaths: readonly RoutePath[] = ["/onboarding", "/home", "/calendar", "/insights", "/settings"];

@@ -12,17 +12,17 @@ export interface Router {
 }
 
 export function createRouter({ routes, onRouteChange }: RouterOptions): Router {
-  const fallback = routes.find((route) => route.path === "/home") ?? routes[0];
+  const fallback = routes.find((route) => route.path === "/login") ?? routes[0];
   if (!fallback) throw new Error("At least one application route is required.");
 
   const resolve = (path: string): AppRoute => routes.find((route) => route.path === path) ?? fallback;
 
   const renderCurrentRoute = (): void => {
-    const requestedPath = window.location.pathname;
+    const requestedPath = pathFromHash(window.location.hash);
     const route = resolve(requestedPath);
 
     if (requestedPath === "/" || !routes.some((candidate) => candidate.path === requestedPath)) {
-      window.history.replaceState({}, "", route.path);
+      window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}#${route.path}`);
     }
 
     document.title = `${route.title} · Couple Cycle`;
@@ -37,23 +37,31 @@ export function createRouter({ routes, onRouteChange }: RouterOptions): Router {
     if (!anchor || anchor.origin !== window.location.origin) return;
 
     event.preventDefault();
-    window.history.pushState({}, "", anchor.pathname);
-    renderCurrentRoute();
+    const requestedPath = pathFromHash(anchor.hash);
+    const destination = `#${resolve(requestedPath).path}`;
+    if (window.location.hash === destination) renderCurrentRoute();
+    else window.location.hash = destination;
   };
 
   return {
     navigate(path: string): void {
-      window.history.pushState({}, "", resolve(path).path);
-      renderCurrentRoute();
+      const destination = `#${resolve(path).path}`;
+      if (window.location.hash === destination) renderCurrentRoute();
+      else window.location.hash = destination;
     },
     start(): void {
-      window.addEventListener("popstate", renderCurrentRoute);
+      window.addEventListener("hashchange", renderCurrentRoute);
       document.addEventListener("click", handleLinkClick);
       renderCurrentRoute();
     },
     stop(): void {
-      window.removeEventListener("popstate", renderCurrentRoute);
+      window.removeEventListener("hashchange", renderCurrentRoute);
       document.removeEventListener("click", handleLinkClick);
     },
   };
+}
+
+export function pathFromHash(hash: string): string {
+  const value = hash.startsWith("#") ? hash.slice(1) : hash;
+  return value.startsWith("/") ? value : "/";
 }

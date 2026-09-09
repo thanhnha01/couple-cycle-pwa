@@ -34,7 +34,9 @@ export async function setupPwa(): Promise<void> {
   if (!("serviceWorker" in navigator) || !import.meta.env.PROD) return;
 
   try {
-    const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    const registration = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {
+      scope: import.meta.env.BASE_URL,
+    });
 
     const offerUpdate = (worker: ServiceWorker): void => {
       showNotice("A new version is ready.", "Update", () => {

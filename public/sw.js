@@ -1,11 +1,13 @@
-const CACHE_VERSION = "couple-cycle-shell-v1";
+const CACHE_VERSION = "couple-cycle-shell-v2";
+const BASE_URL = new URL("./", self.location.href);
+const assetUrl = (path) => new URL(path, BASE_URL).pathname;
 const APP_SHELL = [
-  "/",
-  "/index.html",
-  "/offline.html",
-  "/manifest.webmanifest",
-  "/icons/icon-192.svg",
-  "/icons/icon-512.svg",
+  assetUrl("./"),
+  assetUrl("index.html"),
+  assetUrl("offline.html"),
+  assetUrl("manifest.webmanifest"),
+  assetUrl("icons/icon-192.svg"),
+  assetUrl("icons/icon-512.svg"),
 ];
 
 self.addEventListener("install", (event) => {
@@ -39,7 +41,7 @@ self.addEventListener("fetch", (event) => {
           caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
           return response;
         })
-        .catch(async () => (await caches.match(request)) ?? (await caches.match("/offline.html"))),
+        .catch(async () => (await caches.match(assetUrl("index.html"))) ?? (await caches.match(assetUrl("offline.html")))),
     );
     return;
   }
