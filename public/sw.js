@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nhip-doi-shell-v5";
+const CACHE_VERSION = "nhip-doi-shell-v6";
 const BASE_URL = new URL("./", self.location.href);
 const assetUrl = (path) => new URL(path, BASE_URL).pathname;
 const APP_SHELL = [

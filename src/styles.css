@@ -202,3 +202,109 @@ body { background:var(--canvas); color:var(--ink); font-family:Inter, ui-sans-se
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline:3px solid rgb(47 113 106 / 35%); outline-offset:2px; }
 @media (min-width:48rem) { .page.app-page { padding:2rem 2.5rem 6rem; } .today-page { display:grid; grid-template-columns:1.2fr .8fr; gap:1rem; } .today-page > .welcome-row, .today-page > .love-hero, .today-page > .message-card { grid-column:1 / -1; } .today-page > .love-hero { padding:2rem; } }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; transition-duration:.01ms!important; animation-duration:.01ms!important; } }
+
+/* Nhịp Đôi visual system v3 — warm, quiet, and centered on the love counter */
+:root { --ink:#33272d; --muted:#88747a; --canvas:#fff8f5; --surface:#fffefa; --line:#f0dfe0; --accent:#c35470; --accent-strong:#8f3452; --accent-soft:#fff0f1; --wine:#633248; --warm:#e6ae8a; --shadow:0 14px 36px rgb(103 47 63 / 9%); }
+html { background:var(--canvas); }
+body { background:linear-gradient(180deg,#fff8f5 0,#fffdfb 68%); color:var(--ink); font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+.app-shell { max-width:36rem; min-height:100vh; margin:0 auto; background:rgb(255 253 251 / 72%); }
+.topbar { width:auto; padding:1rem 1.1rem .8rem; border-bottom:0; }
+.brand { gap:.55rem; color:var(--ink); font-size:1.03rem; letter-spacing:-.02em; }
+.brand-mark { width:2.45rem; height:2.45rem; border-radius:1rem 1rem 1rem .45rem; background:linear-gradient(145deg,#ed91a2,#c95370); box-shadow:0 7px 16px rgb(201 83 112 / 22%); }
+.brand-mark svg { width:1.35rem; height:1.35rem; }
+.topbar-tag { color:var(--muted); font-size:.68rem; font-weight:750; }
+.page.app-page { width:auto; padding:0 1rem 6rem; }
+.connection-strip { min-height:2rem; margin:0 -.1rem .2rem; color:var(--muted); font-size:.7rem; }
+.connection-strip > :last-child { color:#a58f94; font-weight:650; }
+.sync-dot { width:.45rem; height:.45rem; }
+.today-page,.content-page { max-width:none; margin:0; gap:1rem; padding:1rem 0 6.5rem; }
+.welcome-row { align-items:center; padding:.25rem .1rem .35rem; }
+.welcome-row h1,.content-page h1 { font-size:clamp(2rem,9vw,2.8rem); letter-spacing:-.055em; }
+.welcome-row h1 { margin:.1rem 0 .28rem; }
+.welcome-row p:not(.eyebrow),.page-lead { color:var(--muted); font-size:.92rem; }
+.eyebrow { margin-bottom:.55rem; color:var(--accent); font-size:.68rem; letter-spacing:.13em; }
+.round-button { width:2.8rem; min-height:2.8rem; border:1px solid #ead2d6; background:var(--surface); color:var(--accent-strong); box-shadow:0 7px 16px rgb(109 46 65 / 8%); }
+.round-button svg { width:1.15rem; height:1.15rem; }
+.love-hero { position:relative; isolation:isolate; border-radius:1.55rem; padding:1.3rem; background:linear-gradient(145deg,#5d3046 0%,#81435b 54%,#c67b7d 100%); box-shadow:0 18px 34px rgb(99 50 72 / 22%); }
+.love-hero::before { position:absolute; z-index:-1; width:12rem; height:12rem; right:-4.5rem; top:-5rem; border-radius:50%; background:rgb(255 213 206 / 18%); content:""; filter:blur(1px); }
+.love-hero::after { display:none; }
+.hero-kicker { color:#ffe7e5; font-size:.66rem; letter-spacing:.14em; }
+.hero-kicker svg { width:1rem; height:1rem; stroke-width:1.7; }
+.avatar-pair { margin:1.2rem 0 .85rem; }
+.avatar-pair span { width:2.8rem; height:2.8rem; border:2px solid rgb(255 255 255 / 72%); background:#d79b7b; font-size:1rem; box-shadow:0 4px 10px rgb(45 21 31 / 12%); }
+.avatar-pair .partner-avatar { margin-left:-.55rem; background:#f4d4be; color:#8f4f55; }
+.avatar-pair i { display:grid; place-items:center; width:1.75rem; height:1.75rem; margin:0 .25rem; background:transparent; color:#ffd7d9; }
+.avatar-pair i svg { width:1rem; height:1rem; }
+.love-counter-row { position:relative; z-index:1; display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; }
+.counter-label { display:block; margin-bottom:.15rem; color:#fbdfe0; font-size:.66rem; font-weight:800; letter-spacing:.16em; }
+.love-count { display:inline; color:#fff; font-size:clamp(3rem,15vw,4.9rem); font-weight:850; letter-spacing:-.08em; line-height:.95; }
+.counter-unit { margin-left:.45rem; color:#ffe2df; font-size:.95rem; font-weight:700; }
+.counter-heart { display:grid; width:3rem; height:3rem; place-items:center; border:1px solid rgb(255 255 255 / 25%); border-radius:1rem; background:rgb(255 255 255 / 12%); color:#ffd0d3; }
+.counter-heart svg { width:1.35rem; height:1.35rem; }
+.love-subtitle { margin:.65rem 0 .85rem; color:rgb(255 242 241 / 78%); font-size:.8rem; line-height:1.45; }
+.milestone-track { height:.32rem; margin:.8rem 0 .45rem; background:rgb(255 255 255 / 18%); }
+.milestone-track span { background:#f3c08f; }
+.milestone-caption { display:flex; align-items:center; justify-content:space-between; color:#f7dbd9; font-size:.68rem; }
+.milestone-caption b { color:#fff3e7; font-size:.72rem; }
+.hero-actions { margin-top:1.05rem; }
+.love-hero .secondary-button,.love-hero .ghost-button { min-height:2.35rem; border:1px solid rgb(255 255 255 / 27%); border-radius:.7rem; background:rgb(255 255 255 / 12%); padding:.5rem .75rem; font-size:.76rem; }
+.love-hero .secondary-button { color:#fff; }
+.love-hero .ghost-button { color:#ffe5e2; }
+.love-date-details { position:relative; z-index:1; margin-top:1rem; border-top:1px solid rgb(255 255 255 / 18%); padding-top:.8rem; }
+.love-date-details summary { width:max-content; color:#ffe3e0; cursor:pointer; font-size:.72rem; font-weight:700; }
+.love-date-form { display:grid; gap:.55rem; margin-top:.7rem; }
+.love-date-form label { display:grid; gap:.35rem; color:#ffe9e6; font-size:.74rem; font-weight:700; }
+.love-date-form input { min-height:2.7rem; border:1px solid rgb(255 255 255 / 32%); border-radius:.7rem; background:rgb(255 255 255 / 12%); color:#fff; padding:.55rem .7rem; }
+.love-date-form input::-webkit-calendar-picker-indicator { filter:invert(1); opacity:.85; }
+.love-date-form .primary-button { min-height:2.7rem; border:0; border-radius:.7rem; background:#ffe0d2; color:#6a3046; font-size:.78rem; }
+.love-date-form .form-status { color:#ffd6d5; }
+.love-empty { max-width:none; padding:1.55rem 0 .15rem; }
+.empty-mark { width:2.9rem; height:2.9rem; border-radius:1rem; background:rgb(255 255 255 / 14%); color:#ffd7d5; }
+.empty-mark svg { width:1.35rem; height:1.35rem; }
+.love-empty h2 { margin:.8rem 0 .4rem; font-size:1.45rem; letter-spacing:-.03em; }
+.love-empty p { margin:0 0 1rem; color:rgb(255 242 241 / 78%); font-size:.84rem; line-height:1.5; }
+.message-card { border:1px solid #f1e4dc; border-radius:1.2rem; padding:1.05rem 1.1rem; background:#fffaf4; box-shadow:0 8px 22px rgb(113 73 54 / 5%); }
+.message-label { color:#b98569; font-size:.66rem; letter-spacing:.13em; }
+.message-card h2 { margin:.65rem 0 .9rem; color:#4a3436; font-family:Georgia,serif; font-size:1.23rem; line-height:1.38; font-weight:500; }
+.message-actions button { border:1px solid #eddcca; background:#f8eddf; color:#805a48; padding:.5rem .7rem; font-size:.72rem; }
+.checkin-card,.history-card,.settings-card { border:1px solid var(--line); border-radius:1.2rem; background:var(--surface); padding:1.05rem; box-shadow:var(--shadow); }
+.checkin-card { gap:.9rem; }
+.checkin-card h2,.section-heading h2,.history-card h2 { font-size:1.08rem; letter-spacing:-.025em; }
+.privacy-note { color:var(--muted); font-size:.7rem; }
+.mood-row { gap:.5rem; }
+.mood-row button { min-height:4.25rem; border:1px solid #f1e3e3; border-radius:.9rem; background:#fffafa; padding:.45rem .1rem; color:#7f6c71; }
+.mood-row button:hover,.mood-row button.active { border-color:#e5a5af; background:#fff0f1; color:var(--accent-strong); }
+.mood-row b { width:auto; height:auto; background:transparent; font-size:1.45rem; line-height:1; }
+.mood-row small { font-size:.65rem; font-weight:750; }
+.shared-tasks { display:grid; gap:.7rem; border:1px solid var(--line); border-radius:1.2rem; background:var(--surface); padding:1.05rem; box-shadow:var(--shadow); }
+.task-count { background:var(--accent-soft); color:var(--accent-strong); }
+.task-form input { min-height:2.7rem; border-color:var(--line); border-radius:.75rem; background:#fff; }
+.task-form button { min-height:2.7rem; border-radius:.75rem; background:var(--wine); }
+.task-form button svg { width:1.1rem; height:1.1rem; }
+.task-list li { border:1px solid #f4e9e7; background:#fffafa; }
+.section-heading { align-items:center; }
+.section-heading h2 { margin:0; }
+.text-button { color:var(--accent-strong); font-size:.75rem; }
+.event-card { border-color:var(--line); border-radius:1rem; background:var(--surface); box-shadow:0 8px 24px rgb(103 47 63 / 5%); }
+.event-date { background:var(--accent-soft); color:var(--accent-strong); }
+.event-card button { color:#c49aa1; font-size:1rem; }
+.empty-events { border-color:#e9cdd1; background:#fffafa; box-shadow:none; }
+.bottom-nav { right:auto; left:50%; width:min(36rem,100%); transform:translateX(-50%); grid-template-columns:repeat(5,1fr); border:0; border-top:1px solid rgb(239 221 222 / 90%); border-radius:1.15rem 1.15rem 0 0; background:rgb(255 254 252 / 94%); padding:.45rem .35rem calc(.45rem + env(safe-area-inset-bottom)); box-shadow:0 -10px 28px rgb(83 43 57 / 9%); }
+.bottom-nav a { min-height:3.1rem; gap:.22rem; border-radius:.8rem; color:#a08b90; padding:.3rem .15rem; font-size:.65rem; }
+.bottom-nav a:hover { color:var(--accent-strong); }
+.bottom-nav a[aria-current="page"] { background:transparent; color:var(--accent-strong); }
+.nav-icon { display:inline-grid; width:1.9rem; height:1.9rem; place-items:center; border-radius:.65rem; }
+.bottom-nav a[aria-current="page"] .nav-icon { background:#ffe8ea; }
+.nav-icon svg { width:1.05rem; height:1.05rem; }
+.bottom-nav a small { font-size:.62rem; font-weight:800; }
+
+@media (min-width:48rem) {
+  .app-shell { max-width:72rem; background:transparent; }
+  .topbar { max-width:64rem; margin:0 auto; padding-inline:0; }
+  .page.app-page { max-width:64rem; margin:0 auto; padding-inline:0; }
+  .today-page,.content-page { max-width:64rem; }
+  .today-page { grid-template-columns:1.15fr .85fr; }
+  .today-page > .welcome-row,.today-page > .love-hero,.today-page > .message-card { grid-column:1 / -1; }
+  .love-hero { padding:1.7rem; }
+  .bottom-nav { width:min(72rem,100%); }
+}
