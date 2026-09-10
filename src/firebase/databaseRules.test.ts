@@ -43,4 +43,13 @@ describe("Realtime Database rule posture", () => {
     expect(presence.lastSeenAt[".validate"]).toContain("=== now");
     expect(presence.updatedAt[".validate"]).toContain("=== now");
   });
+
+  it("limits memories and checklist entries to couple members with validated schema", () => {
+    const features = rules.rules.couples.$coupleId.features;
+    expect(features[".read"]).toContain("members");
+    expect(features[".write"]).toContain("members");
+    expect(features.memories.$memoryId[".write"]).toContain("members");
+    expect(features.memories.$memoryId.createdAt[".validate"]).toContain("now");
+    expect(features.checklist.$itemId.completedBy[".validate"]).toContain("auth.uid");
+  });
 });

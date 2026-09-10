@@ -353,3 +353,23 @@ describe("shared period permissions", () => {
     await assertFails(databaseFor(OUTSIDER).ref(`couples/${OWNER_A.uid}/periods`).once("value"));
   });
 });
+
+describe("shared memory and checklist permissions", () => {
+  it("allows both members to collaborate while denying outsiders and invalid fields", async () => {
+    await createCouple(OWNER_A);
+    await redeem(JOINER_B, OWNER_A.uid, TOKEN_A);
+    await assertSucceeds(databaseFor(OWNER_A).ref(`couples/${OWNER_A.uid}/features`).set({
+      checklist: { "default-0": { title: "Cùng nấu ăn", done: false, createdAt: serverTimestamp, createdBy: OWNER_A.uid } },
+      memories: { migrated: { title: "Ngày đầu", note: "Dữ liệu local được chuyển lên", date: "2026-09-10", createdAt: serverTimestamp, createdBy: OWNER_A.uid } },
+    }));
+    const memory = `couples/${OWNER_A.uid}/features/memories/m1`;
+    const checklist = `couples/${OWNER_A.uid}/features/checklist/c1`;
+    await assertSucceeds(databaseFor(OWNER_A).ref(memory).set({ title: "Buổi hẹn đầu", note: "Cà phê chiều", date: "2026-09-10", createdAt: serverTimestamp, createdBy: OWNER_A.uid }));
+    await assertSucceeds(databaseFor(JOINER_B).ref(memory).once("value"));
+    await assertSucceeds(databaseFor(JOINER_B).ref(checklist).set({ title: "Cùng nấu ăn", done: false, createdAt: serverTimestamp, createdBy: JOINER_B.uid }));
+    await assertSucceeds(databaseFor(OWNER_A).ref(checklist).update({ done: true, completedAt: serverTimestamp, completedBy: OWNER_A.uid }));
+    await assertFails(databaseFor(OUTSIDER).ref(memory).once("value"));
+    await assertFails(databaseFor(OUTSIDER).ref(checklist).set({ title: "Không hợp lệ", done: false, createdAt: serverTimestamp, createdBy: OUTSIDER.uid }));
+    await assertFails(databaseFor(OWNER_A).ref(memory).update({ secret: "no" }));
+  });
+});

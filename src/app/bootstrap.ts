@@ -49,7 +49,7 @@ export async function bootstrapApplication(): Promise<void> {
   const coupleSession = new CoupleSessionStore(couples);
   const eventService = new CoupleEventService(isFirebaseConfigured);
   const dailyService = new DailyConnectionService(isFirebaseConfigured);
-  const featureService = new CoupleFeatureService();
+  const featureService = new CoupleFeatureService(isFirebaseConfigured);
   let currentRoute: AppRoute = routes[0]!;
   let loadedUid: string | undefined;
   let currentInvite: InviteDetails | undefined;
@@ -67,6 +67,7 @@ export async function bootstrapApplication(): Promise<void> {
   let stopEvents: (() => void) | undefined;
   let stopTasks: (() => void) | undefined;
   let stopCheckins: (() => void) | undefined;
+  let stopFeatures: (() => void) | undefined;
   let stopRealtime: (() => void) | undefined;
   let activeCoupleId: string | undefined;
 
@@ -85,6 +86,8 @@ export async function bootstrapApplication(): Promise<void> {
     stopTasks = undefined;
     stopCheckins?.();
     stopCheckins = undefined;
+    stopFeatures?.();
+    stopFeatures = undefined;
     periods = [];
     loadedPeriodsCoupleId = undefined;
     coupleSession.reset();
@@ -223,6 +226,10 @@ export async function bootstrapApplication(): Promise<void> {
       }
       if (!stopCheckins && authSession.snapshot.status === "authenticated") {
         stopCheckins = dailyService.subscribeCheckins(authSession.snapshot.user.uid, (nextCheckins) => { privateCheckins = nextCheckins.filter((checkin) => checkin.coupleId === membership.coupleId); render(); });
+      }
+      if (!stopFeatures && authSession.snapshot.status === "authenticated") {
+        stopFeatures = featureService.subscribe(membership.coupleId, () => render());
+        void featureService.migrate(membership.coupleId, authSession.snapshot.user.uid).catch(() => undefined);
       }
       void periodService.replay();
     }

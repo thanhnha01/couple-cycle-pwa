@@ -1,6 +1,7 @@
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getDatabase } from "firebase-admin/database";
 import { getMessaging } from "firebase-admin/messaging";
+import { systemHolidays } from "./holidays.js";
 
 if (!getApps().length) {
   const databaseURL = process.env.FIREBASE_DATABASE_URL;
@@ -116,4 +117,10 @@ export async function sendDailyAndMilestoneReminders(): Promise<{ sent: number }
   });
   await Promise.all(work);
   return { sent };
+}
+
+export async function sendSystemHolidayReminders(): Promise<{ sent: number }> {
+  const database = getDatabase(); const today = vietnamDate(); const year = Number(today.slice(0, 4)); const couples = await database.ref("couples").once("value"); let sent = 0; const work: Promise<void>[] = [];
+  couples.forEach((couple) => { const value = couple.val() as CoupleValue; const tokens = Object.values(value.notificationTokens ?? {}).flatMap((records) => Object.values(records).flatMap((record) => typeof record.token === "string" ? [record.token] : [])); if (!tokens.length || !couple.key) return; for (const holiday of [...systemHolidays(year), ...systemHolidays(year + 1)]) { const left = daysBetween(today, holiday.date); if (left !== 0 && left !== 1) continue; work.push(sendOnce(database, couple.key, `holiday-${holiday.id}-${left}`, today, tokens, "Nhịp Đôi · ngày lễ", left === 0 ? `Hôm nay là ${holiday.title}.` : `Ngày mai là ${holiday.title}.`).then((count) => { sent += count; })); } });
+  await Promise.all(work); return { sent };
 }

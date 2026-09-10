@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
-    "test:rules": "firebase emulators:exec --only database --project demo-couple-cycle \"vitest run --config vitest.rules.config.ts\"",
+    "test:rules": "node scripts/run-firebase-tools.cjs emulators:exec --only database --project demo-couple-cycle \"vitest run --silent --config vitest.rules.config.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -18,9 +18,17 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
+    "chalk": "4.1.2",
     "firebase-tools": "^15.29.0",
+    "lru-cache": "10.4.3",
+    "mime": "1.6.0",
+    "readable-stream": "2.3.8",
+    "signal-exit": "3.0.7",
     "typescript": "^5.9.2",
     "vite": "^7.1.4",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "path-scurry>lru-cache": "10.4.3"
   }
 }
