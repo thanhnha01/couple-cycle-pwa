@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nhip-doi-shell-v4";
+const CACHE_VERSION = "nhip-doi-shell-v5";
 const BASE_URL = new URL("./", self.location.href);
 const assetUrl = (path) => new URL(path, BASE_URL).pathname;
 const APP_SHELL = [
@@ -27,7 +27,7 @@ try {
       const options = {
         body: payload.notification?.body ?? "Bạn có một lời nhắc mới.",
         icon: assetUrl("icons/icon-192.svg"),
-        badge: assetUrl("icons/icon-192.svg"),
+        badge: assetUrl("icons/badge.svg"),
         tag: payload.notification?.tag ?? "nhip-doi-reminder",
         data: { url: assetUrl("./") },
       };
