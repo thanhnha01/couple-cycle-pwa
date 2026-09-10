@@ -1,4 +1,4 @@
-import { getToken, isSupported, onMessage } from "firebase/messaging";
+import { getMessaging, getToken, isSupported, onMessage } from "firebase/messaging";
 import { ref, serverTimestamp, set } from "firebase/database";
 import { getFirebaseApp } from "../firebase/app";
 import { getFirebaseDatabase } from "../firebase/database";
@@ -12,7 +12,6 @@ export async function enableFirebasePush(coupleId: string, uid: string): Promise
   const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined;
   if (!vapidKey) return "missing-vapid";
   const registration = await navigator.serviceWorker.ready;
-  const { getMessaging } = await import("firebase/messaging");
   const messaging = getMessaging(getFirebaseApp());
   const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
   if (!token) throw new Error("Không thể tạo mã nhận thông báo cho thiết bị này.");
