@@ -2,7 +2,11 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getDatabase } from "firebase-admin/database";
 import { getMessaging } from "firebase-admin/messaging";
 
-if (!getApps().length) initializeApp();
+if (!getApps().length) {
+  const databaseURL = process.env.FIREBASE_DATABASE_URL;
+  if (!databaseURL) throw new Error("FIREBASE_DATABASE_URL is required for the reminder runner.");
+  initializeApp({ databaseURL });
+}
 
 interface EventRecord { title?: unknown; date?: unknown; reminderDays?: unknown; }
 interface TokenRecord { token?: unknown; }
