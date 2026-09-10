@@ -1,433 +1,101 @@
 import type { AuthenticationService } from "../auth/contracts";
 import { AuthError } from "../auth/errors";
 import type { AuthSessionState } from "../auth/session";
-import { SubmissionController, type SubmissionState } from "../auth/submission";
 import type { AppRoute, RoutePath } from "../app/routes";
 import { queryFromHash } from "../app/router";
-import type { CoupleApplicationService } from "../couple/contracts";
-import { CoupleError } from "../couple/errors";
-import type { CoupleSessionState } from "../couple/session";
-import type { CoupleMembership, InviteDetails } from "../couple/types";
 import { bindCalendarPage, renderCalendarPage } from "../calendar/calendarPage";
-import type { Period } from "../cycle/types";
+import type { CoupleApplicationService } from "../couple/contracts";
+import type { CoupleSessionState } from "../couple/session";
+import type { CoupleMembership, InviteDetails, Presence } from "../couple/types";
+import { predictCycle, type Period } from "../cycle";
+import type { CoupleEvent, CoupleEventKind } from "../events/types";
+import type { CoupleEventService } from "../events/service";
+import { askForNotificationPermission, notificationState } from "../notifications/localNotifications";
+import { enableFirebasePush } from "../notifications/firebasePush";
 import type { OfflinePeriodService } from "../sync/offlinePeriodService";
 import type { SyncOperation, SyncState } from "../sync/types";
-import type { Presence } from "../couple/types";
-import { predictCycle } from "../cycle";
+import { calendarDate, formatCalendarDate, type CalendarDate } from "../utils/date";
 
 interface RenderContext {
-  auth: AuthenticationService;
-  couples: CoupleApplicationService;
-  authSession: AuthSessionState;
-  coupleSession: CoupleSessionState;
-  invite: InviteDetails | undefined;
-  inviteLoading: boolean;
-  firebaseConfigured: boolean;
-  navigate: (path: string) => void;
-  setMembership: (membership: CoupleMembership, invite?: InviteDetails) => void;
-  setInvite: (invite: InviteDetails) => void;
-  periods: readonly Period[];
-  periodsLoading: boolean;
-  periodsError: boolean;
-  periodService: OfflinePeriodService;
-  refreshPeriods: () => Promise<void>;
-  syncState: SyncState;
-  syncOperations: readonly SyncOperation[];
-  presence: readonly Presence[];
-  rerender: () => void;
+  auth: AuthenticationService; couples: CoupleApplicationService; authSession: AuthSessionState; coupleSession: CoupleSessionState;
+  invite: InviteDetails | undefined; inviteLoading?: boolean; firebaseConfigured: boolean; navigate: (path: string) => void;
+  setMembership: (membership: CoupleMembership, invite?: InviteDetails) => void; setInvite?: (invite: InviteDetails) => void;
+  periods: readonly Period[]; periodsLoading: boolean; periodsError: boolean; periodService: OfflinePeriodService; refreshPeriods: () => Promise<void>;
+  syncState: SyncState; syncOperations: readonly SyncOperation[]; presence: readonly Presence[]; events: readonly CoupleEvent[]; eventService: CoupleEventService; rerender: () => void;
 }
 
-const primaryNavigation: readonly [RoutePath, string][] = [
-  ["/home", "Home"], ["/calendar", "Calendar"], ["/history", "History"], ["/insights", "Insights"], ["/settings", "Settings"],
-];
-const routeHref = (path: RoutePath): string => `#${path}`;
+const href = (path: RoutePath) => `#${path}`;
+let composerOpen = false;
+const icon = (glyph: string) => `<span class="nav-icon" aria-hidden="true">${glyph}</span>`;
+const today = (): CalendarDate => { const d = new Date(); return calendarDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`); };
+const userId = (context: RenderContext) => context.authSession.status === "authenticated" ? context.authSession.user.uid : "";
+const escapeHtml = (value: string) => value.replace(/[&<>'"]/gu, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char] ?? char);
+const syncText = (state: SyncState) => ({ synced: "Đã đồng bộ", syncing: "Đang đồng bộ", offline: "Ngoại tuyến", pending: "Đang chờ đồng bộ", error: "Có lỗi đồng bộ" })[state];
 
 function shell(content: string): string {
-  return `<div class="app-shell">
-    <header class="topbar"><a class="brand" data-route href="${routeHref("/home")}" aria-label="Couple Cycle home"><span class="brand-mark" aria-hidden="true">C</span><span>Couple Cycle</span></a></header>
-    ${content}<div id="pwa-notices" class="pwa-notices" aria-live="polite"></div></div>`;
+  return `<div class="app-shell"><header class="topbar"><a class="brand" data-route href="#/home"><span class="brand-mark">♡</span><span>Nhịp Đôi</span></a><span class="topbar-tag">Dành cho hai người</span></header>${content}<div id="pwa-notices" class="pwa-notices"></div></div>`;
 }
-
-function syncLabel(state: SyncState): string {
-  return ({ synced: "Synced", syncing: "Syncing", offline: "Offline", pending: "Pending", error: "Sync error" })[state];
-}
-
-function statusStrip(context: RenderContext): string {
-  const partnerOnline = context.presence.some((person) => person.userId !== currentUid(context) && person.state === "online");
-  const conflicts = context.syncOperations.filter((operation) => operation.status === "conflict").length;
-  return `<div class="connection-strip" role="status" aria-live="polite"><span class="sync-dot sync-${context.syncState}" aria-hidden="true"></span><span>${syncLabel(context.syncState)}</span><span class="partner-status">Partner ${partnerOnline ? "online" : "away"}</span>${conflicts ? `<button id="show-conflicts" class="text-button" type="button">${conflicts} conflict${conflicts === 1 ? "" : "s"}</button>` : ""}</div>`;
-}
-
-function currentUid(context: RenderContext): string { return context.authSession.status === "authenticated" ? context.authSession.user.uid : ""; }
 
 export function renderApplication(root: HTMLElement, route: AppRoute, context: RenderContext): void {
-  if (context.authSession.status === "initializing") {
-    root.innerHTML = shell(`<main class="auth-layout" aria-busy="true"><section class="auth-card auth-loading" aria-labelledby="auth-loading-title"><span class="loading-indicator" aria-hidden="true"></span><h1 id="auth-loading-title">Opening your private space</h1><p>Securely restoring your session…</p></section></main>`);
-    return;
-  }
-  if (["/login", "/register", "/forgot-password"].includes(route.path)) {
-    renderAuthRoute(root, route.path, context);
-    return;
-  }
-  if (context.coupleSession.status === "initializing") {
-    root.innerHTML = shell(`<main class="auth-layout" aria-busy="true"><section class="auth-card auth-loading" aria-labelledby="couple-loading-title"><span class="loading-indicator" aria-hidden="true"></span><h1 id="couple-loading-title">Checking your shared space</h1><p>Verifying couple membership…</p></section></main>`);
-    return;
-  }
-  renderProtectedRoute(root, route, context);
+  if (context.authSession.status === "initializing") { root.innerHTML = shell(loading("Đang mở không gian riêng tư")); return; }
+  if (["/login", "/register", "/forgot-password"].includes(route.path)) { renderAuth(root, route.path, context); return; }
+  if (context.coupleSession.status === "initializing") { root.innerHTML = shell(loading("Đang kết nối hai bạn")); return; }
+  if (context.coupleSession.status !== "linked") { renderOnboarding(root, context); return; }
+  const membership = context.coupleSession.membership;
+  if (route.path === "/invite") { renderInvite(root, context); return; }
+  const page = route.path === "/home" ? home(context, membership) : route.path === "/calendar" ? calendar(context, membership) : route.path === "/history" ? history(context) : route.path === "/insights" ? insights(context) : settings(context, membership);
+  const menu: readonly [RoutePath, string, string][] = [["/home", "Hôm nay", "⌂"], ["/calendar", "Lịch", "□"], ["/history", "Nhật ký", "◫"], ["/insights", "Khám phá", "✦"], ["/settings", "Cá nhân", "◯"]];
+  root.innerHTML = shell(`<main class="page app-page"><div class="connection-strip"><span class="sync-dot sync-${context.syncState}"></span>${syncText(context.syncState)}<span>Không gian riêng tư</span></div>${page}</main><nav class="bottom-nav">${menu.map(([path, label, glyph]) => `<a data-route href="${href(path)}" ${route.path === path ? 'aria-current="page"' : ""}>${icon(glyph)}<small>${label}</small></a>`).join("")}</nav>${composerOpen ? eventForm() : ""}`);
+  if (route.path === "/calendar") bindCalendarPage(root, { periods: context.periods, loading: context.periodsLoading, error: context.periodsError, coupleId: membership.coupleId, uid: userId(context), service: context.periodService, refresh: context.refreshPeriods, rerender: context.rerender });
+  bindCommon(root, context, membership);
 }
 
-function renderAuthRoute(root: HTMLElement, path: RoutePath, context: RenderContext): void {
-  const titles: Record<string, string> = { "/login": "Welcome back", "/register": "Create your account", "/forgot-password": "Reset your password" };
-  const forms: Record<string, string> = { "/login": loginForm(), "/register": registerForm(), "/forgot-password": resetForm() };
-  const description = path === "/forgot-password"
-    ? "Enter your email and we’ll send a secure reset link if an account is available."
-    : "Calm, thoughtful cycle support—shared only with the person you choose.";
-  root.innerHTML = shell(`<main class="auth-layout">
-    <section class="auth-intro" aria-labelledby="auth-title"><p class="eyebrow">A private space for two</p><h1 id="auth-title">${titles[path] ?? "Account"}</h1><p class="description">${description}</p></section>
-    <section class="auth-card">${!context.firebaseConfigured ? '<p class="configuration-note" role="status">Firebase configuration is required before authentication can be used.</p>' : ""}${forms[path] ?? ""}</section>
-  </main>`);
-  bindAuthForm(root, path, context);
-  bindPasswordToggles(root);
+function loading(title: string): string { return `<main class="auth-layout"><section class="auth-card auth-loading"><span class="loading-indicator"></span><h1>${title}</h1><p>Chỉ một chút thôi nhé…</p></section></main>`; }
+function renderAuth(root: HTMLElement, path: RoutePath, context: RenderContext): void {
+  const title = path === "/login" ? "Chào mừng bạn trở lại" : path === "/register" ? "Tạo không gian của hai bạn" : "Đặt lại mật khẩu";
+  const form = path === "/login" ? login() : path === "/register" ? register() : reset();
+  root.innerHTML = shell(`<main class="auth-layout"><section class="auth-intro"><span class="hero-orb">♡</span><p class="eyebrow">KHÔNG GIAN RIÊNG TƯ CHO HAI NGƯỜI</p><h1>${title}</h1><p class="description">Cùng ghi nhớ những điều quan trọng và quan tâm nhau đúng lúc.</p></section><section class="auth-card">${!context.firebaseConfigured ? '<p class="configuration-note">Ứng dụng chưa được kết nối máy chủ nên chưa thể đăng nhập.</p>' : ""}${form}</section></main>`);
+  root.querySelector<HTMLFormElement>("#auth-form")?.addEventListener("submit", (event) => { event.preventDefault(); const formElement = event.currentTarget as HTMLFormElement; const data = new FormData(formElement); const value = (key: string) => String(data.get(key) ?? ""); const action = path === "/login" ? context.auth.login({ email: value("email"), password: value("password") }) : path === "/register" ? context.auth.register({ displayName: value("displayName"), email: value("email"), password: value("password"), passwordConfirmation: value("passwordConfirmation") }) : context.auth.requestPasswordReset(value("email")); void action.then(() => { if (path === "/forgot-password") setFormStatus(formElement, "Nếu email này có tài khoản, liên kết đặt lại đã được gửi."); else context.navigate("/onboarding"); }).catch((error: unknown) => setFormStatus(formElement, error instanceof AuthError ? error.message : "Đã có lỗi xảy ra. Vui lòng thử lại.")); });
 }
+function field(id: string, label: string, type: string, placeholder: string): string { return `<label class="field">${label}<input id="${id}" name="${id}" type="${type}" placeholder="${placeholder}" required><small></small></label>`; }
+function submit(label: string): string { return `<p class="form-status"></p><button class="primary-button" type="submit">${label} <b>→</b></button>`; }
+function login(): string { return `<form id="auth-form">${field("email", "Email", "email", "ban@example.com")}${field("password", "Mật khẩu", "password", "••••••••")}<p class="form-row"><a data-route href="#/forgot-password">Quên mật khẩu?</a></p>${submit("Đăng nhập")}<p class="auth-switch">Chưa có tài khoản? <a data-route href="#/register">Tạo tài khoản</a></p></form>`; }
+function register(): string { return `<form id="auth-form">${field("displayName", "Tên của bạn", "text", "Ví dụ: Minh")}${field("email", "Email", "email", "ban@example.com")}${field("password", "Mật khẩu", "password", "Tối thiểu 8 ký tự")}${field("passwordConfirmation", "Nhập lại mật khẩu", "password", "••••••••")}${submit("Tạo tài khoản")}<p class="auth-switch">Đã có tài khoản? <a data-route href="#/login">Đăng nhập</a></p></form>`; }
+function reset(): string { return `<form id="auth-form">${field("email", "Email", "email", "ban@example.com")}${submit("Gửi liên kết đặt lại")}<p class="auth-switch"><a data-route href="#/login">Quay lại đăng nhập</a></p></form>`; }
+function setFormStatus(form: HTMLFormElement, text: string): void { const target = form.querySelector<HTMLElement>(".form-status"); if (target) target.textContent = text; }
 
-function loginForm(): string {
-  return `<form id="auth-form" novalidate>${field("email", "Email", "email", "email", "you@example.com")}${passwordField("password", "Password")}
-    <div class="form-row"><a data-route href="${routeHref("/forgot-password")}">Forgot password?</a></div>${formStatusAndButton("Sign in")}
-    <p class="auth-switch">New to Couple Cycle? <a data-route href="${routeHref("/register")}">Create an account</a></p></form>`;
+function home(context: RenderContext, membership: CoupleMembership): string {
+  const prediction = predictCycle({ periods: context.periods, asOfDate: today() });
+  const events = context.events.filter((event) => event.date >= today()).slice(0, 3);
+  const cycle = prediction.expectedDate ? `Dự kiến ${formatCalendarDate(prediction.expectedDate)}` : "Ghi thêm chu kỳ để có dự đoán riêng";
+  return `<section class="today-page"><div class="welcome-row"><div><p class="eyebrow">HÔM NAY</p><h1>${escapeHtml(membership.profile.name)}</h1><p>Nhẹ nhàng để ý nhau một chút nhé.</p></div><button class="round-button" data-open-event type="button">＋</button></div><section class="hero-card"><span>♡ NHỊP CỦA HAI BẠN</span><h2>${cycle}</h2><p>${prediction.expectedDate ? "Dự đoán từ những lần bạn đã ghi nhận." : "Mỗi lần ghi nhận giúp ứng dụng hiểu bạn hơn."}</p><a data-route href="#/calendar">Mở lịch chu kỳ →</a></section><section class="checkin-card"><div><p class="eyebrow">CHECK-IN 10 GIÂY</p><h2>Hôm nay bạn thấy thế nào?</h2></div><div class="mood-row">${[["😊", "vui"], ["😌", "ổn"], ["😔", "mệt"], ["🥺", "cần ôm"]].map(([emoji, label]) => `<button data-mood="${label}" type="button"><b>${emoji}</b><small>${label}</small></button>`).join("")}</div></section><section class="section-heading"><div><p class="eyebrow">SẮP TỚI</p><h2>Ngày của hai bạn</h2></div><button data-open-event class="text-button" type="button">Thêm mới</button></section>${events.length ? `<div class="event-list">${events.map(eventCard).join("")}</div>` : `<section class="empty-events"><span>♡</span><strong>Chưa có ngày quan trọng</strong><p>Thêm ngày yêu nhau, sinh nhật hoặc buổi hẹn để được nhắc đúng lúc.</p><button data-open-event class="secondary-button" type="button">Thêm ngày</button></section>`}<section class="gentle-tip"><span>✦</span><p><strong>Một gợi ý nhỏ</strong><br>Gửi người ấy một lời hỏi thăm ngắn — đôi khi vậy là đủ để ngày hôm nay ấm áp hơn.</p></section></section>`;
 }
+function eventCard(event: CoupleEvent): string { const kinds: Record<CoupleEventKind, string> = { anniversary: "Kỷ niệm", birthday: "Sinh nhật", holiday: "Ngày lễ", date: "Hẹn hò", custom: "Ngày quan trọng" }; return `<article class="event-card"><span class="event-date"><b>${Number(event.date.slice(8))}</b><small>THG ${Number(event.date.slice(5, 7))}</small></span><div><small>${kinds[event.kind]}</small><h3>${escapeHtml(event.title)}</h3><p>${event.reminderDays.length ? `Nhắc trước ${event.reminderDays.join(", ")} ngày` : "Chưa bật lời nhắc"}</p></div><button data-remove-event="${event.id}" type="button" aria-label="Xóa">×</button></article>`; }
+function calendar(context: RenderContext, membership: CoupleMembership): string { return renderCalendarPage({ periods: context.periods, loading: context.periodsLoading, error: context.periodsError, coupleId: membership.coupleId, uid: userId(context), service: context.periodService, refresh: context.refreshPeriods, rerender: context.rerender }); }
+function history(context: RenderContext): string { return `<section class="content-page"><p class="eyebrow">NHẬT KÝ RIÊNG</p><h1>Những điều đã ghi</h1><p class="page-lead">Nhìn lại nhịp sinh hoạt của bạn theo cách dịu dàng và riêng tư.</p><section class="history-card"><h2>Chu kỳ đã ghi nhận</h2>${context.periods.length ? `<ol class="history-list">${context.periods.map((period) => `<li><b>${formatCalendarDate(period.startDate)}${period.endDate ? ` — ${formatCalendarDate(period.endDate)}` : ""}</b><small>Thông tin riêng tư của hai bạn</small></li>`).join("")}</ol>` : "<p>Chưa có dữ liệu. Bắt đầu bằng việc ghi nhận kỳ gần nhất của bạn.</p>"}</section></section>`; }
+function insights(context: RenderContext): string { const prediction = predictCycle({ periods: context.periods, asOfDate: today() }); return `<section class="content-page"><p class="eyebrow">HIỂU HƠN MỖI NGÀY</p><h1>Nhịp của bạn</h1><p class="page-lead">Một vài điểm chạm nhẹ nhàng, không thay thế tư vấn y tế.</p><section class="insight-feature"><span>✦</span><small>DỰ ĐOÁN KỲ TIẾP THEO</small><h2>${prediction.expectedDate ? formatCalendarDate(prediction.expectedDate) : "Chưa đủ dữ liệu"}</h2><p>Ghi nhận đều đặn giúp dự đoán ngày càng phù hợp hơn.</p></section><div class="insight-grid"><section><small>Chu kỳ điển hình</small><strong>${prediction.cycleLength.expected ? `${prediction.cycleLength.expected} ngày` : "—"}</strong></section><section><small>Lần ghi nhận</small><strong>${context.periods.length}</strong></section></div></section>`; }
+function settings(context: RenderContext, membership: CoupleMembership): string { const state = notificationState(); return `<section class="content-page"><p class="eyebrow">KHÔNG GIAN CỦA BẠN</p><h1>Cá nhân & riêng tư</h1><section class="settings-card"><span>${membership.profile.name.slice(0, 1)}</span><div><strong>${escapeHtml(membership.profile.name)}</strong><p>Không gian chỉ dành cho hai bạn</p></div></section><section class="settings-group"><h2>Thông báo</h2><button id="notification-button" class="settings-row" type="button"><span>♧</span><div><strong>Nhắc ngày quan trọng</strong><small>${state === "granted" ? "Đã bật trên thiết bị này" : "Bật để nhận lời nhắc đúng lúc"}</small></div><b>${state === "granted" ? "Đã bật" : "Bật"}</b></button><p id="notification-status" class="form-status"></p></section><section class="settings-group"><h2>Dữ liệu</h2><div class="settings-row"><span>♡</span><div><strong>Quyền riêng tư</strong><small>Dữ liệu chỉ hiển thị trong không gian chung.</small></div></div><div class="settings-row"><span>↻</span><div><strong>Đồng bộ</strong><small>${syncText(context.syncState)}</small></div></div></section><button id="logout-button" class="secondary-button logout-button" type="button">Đăng xuất</button></section>`; }
+function eventForm(): string { return `<div id="sheet-backdrop" class="sheet-backdrop"><section class="event-sheet"><button id="close-sheet" class="sheet-close" type="button">×</button><span class="sheet-pill"></span><p class="eyebrow">NGÀY CỦA HAI BẠN</p><h2>Thêm một điều đáng nhớ</h2><form id="event-form">${field("event-title", "Tên sự kiện", "text", "Ví dụ: Kỷ niệm yêu nhau")}<div class="event-form-grid"><label class="field">Ngày diễn ra<input id="event-date" name="event-date" type="date" value="${today()}" required></label><label class="field">Loại ngày<select name="kind"><option value="anniversary">Kỷ niệm</option><option value="birthday">Sinh nhật</option><option value="date">Hẹn hò</option><option value="holiday">Ngày lễ</option><option value="custom">Tùy chỉnh</option></select></label></div><fieldset><legend>Nhắc trước</legend><label><input type="checkbox" name="reminder" value="7" checked> 7 ngày</label><label><input type="checkbox" name="reminder" value="3" checked> 3 ngày</label><label><input type="checkbox" name="reminder" value="1" checked> 1 ngày</label><label><input type="checkbox" name="reminder" value="0"> Đúng ngày</label></fieldset><p class="form-status"></p><button class="primary-button" type="submit">Lưu ngày quan trọng →</button></form></section></div>`; }
 
-function registerForm(): string {
-  return `<form id="auth-form" novalidate>${field("displayName", "Display name", "text", "name", "Your name")}${field("email", "Email", "email", "email", "you@example.com")}
-    ${passwordField("password", "Password", "Use at least 8 characters", "new-password")}${passwordField("passwordConfirmation", "Confirm password", "", "new-password")}
-    ${formStatusAndButton("Create account")}<p class="auth-switch">Already have an account? <a data-route href="${routeHref("/login")}">Sign in</a></p></form>`;
+function bindCommon(root: HTMLElement, context: RenderContext, membership: CoupleMembership): void {
+  root.querySelectorAll<HTMLButtonElement>("[data-open-event]").forEach((button) => button.addEventListener("click", () => { composerOpen = true; context.rerender(); }));
+  root.querySelector<HTMLButtonElement>("#close-sheet")?.addEventListener("click", () => { composerOpen = false; context.rerender(); });
+  root.querySelector<HTMLButtonElement>("#logout-button")?.addEventListener("click", () => { void context.auth.logout().then(() => context.navigate("/login")); });
+  root.querySelector<HTMLButtonElement>("#notification-button")?.addEventListener("click", () => { void askForNotificationPermission().then(async (permission) => { if (permission !== "granted") { context.rerender(); return; } if (!context.firebaseConfigured) { setText(root, "#notification-status", "Đã bật nhắc khi ứng dụng đang mở. Kết nối Firebase để nhận push khi app đóng."); return; } const result = await enableFirebasePush(membership.coupleId, userId(context)); if (result === "missing-vapid") setText(root, "#notification-status", "Thiếu VAPID key. Hãy thêm VITE_FIREBASE_VAPID_KEY vào cấu hình."); else if (result === "unsupported") setText(root, "#notification-status", "Trình duyệt này chưa hỗ trợ thông báo đẩy."); else context.rerender(); }).catch(() => setText(root, "#notification-status", "Không thể bật thông báo trên thiết bị này.")); });
+  root.querySelectorAll<HTMLButtonElement>("[data-mood]").forEach((button) => button.addEventListener("click", () => { try { localStorage.setItem(`nhip-doi:checkin:${today()}`, button.dataset.mood ?? "ổn"); } catch { /* optional */ } button.classList.add("active"); }));
+  root.querySelectorAll<HTMLButtonElement>("[data-remove-event]").forEach((button) => button.addEventListener("click", () => { if (!window.confirm("Xóa ngày quan trọng này?")) return; void context.eventService.remove(membership.coupleId, button.dataset.removeEvent ?? "").catch(() => undefined); }));
+  root.querySelector<HTMLFormElement>("#event-form")?.addEventListener("submit", (event) => { event.preventDefault(); const form = event.currentTarget as HTMLFormElement; const data = new FormData(form); let date: CalendarDate; try { date = calendarDate(String(data.get("event-date"))); } catch { setFormStatus(form, "Hãy chọn ngày hợp lệ."); return; } void context.eventService.create(membership.coupleId, userId(context), { title: String(data.get("event-title") ?? ""), date, kind: String(data.get("kind")) as CoupleEventKind, reminderDays: data.getAll("reminder").map(Number) }).then(() => { composerOpen = false; context.rerender(); }).catch((error: unknown) => setFormStatus(form, error instanceof Error ? error.message : "Không thể lưu sự kiện.")); });
 }
-
-function resetForm(): string {
-  return `<form id="auth-form" novalidate>${field("email", "Email", "email", "email", "you@example.com")}${formStatusAndButton("Send reset link")}
-    <p class="auth-switch"><a data-route href="${routeHref("/login")}">Back to sign in</a></p></form>`;
-}
-
-function field(id: string, label: string, type: string, autocomplete: string, placeholder: string): string {
-  return `<div class="field"><label for="${id}">${label}</label><input id="${id}" name="${id}" type="${type}" autocomplete="${autocomplete}" placeholder="${placeholder}" aria-describedby="${id}-error" required><p class="field-error" id="${id}-error"></p></div>`;
-}
-
-function passwordField(id: string, label: string, hint = "", autocomplete = "current-password"): string {
-  return `<div class="field"><label for="${id}">${label}</label><div class="password-input"><input id="${id}" name="${id}" type="password" autocomplete="${autocomplete}" aria-describedby="${id}-hint ${id}-error" required><button type="button" data-password-toggle="${id}" aria-label="Show ${label.toLowerCase()}">Show</button></div><p class="field-hint" id="${id}-hint">${hint}</p><p class="field-error" id="${id}-error"></p></div>`;
-}
-
-function formStatusAndButton(label: string): string {
-  return `<p id="form-status" class="form-status" role="alert" aria-live="assertive" tabindex="-1"></p><button class="primary-button" type="submit"><span>${label}</span><span class="button-spinner" aria-hidden="true"></span></button>`;
-}
-
-function bindPasswordToggles(root: HTMLElement): void {
-  for (const button of root.querySelectorAll<HTMLButtonElement>("[data-password-toggle]")) {
-    button.addEventListener("click", () => {
-      const id = button.dataset.passwordToggle;
-      const input = id ? root.querySelector<HTMLInputElement>(`#${id}`) : null;
-      if (!input) return;
-      const showing = input.type === "text";
-      input.type = showing ? "password" : "text";
-      button.textContent = showing ? "Show" : "Hide";
-      button.setAttribute("aria-label", `${showing ? "Show" : "Hide"} ${id === "passwordConfirmation" ? "password confirmation" : "password"}`);
-      input.focus();
-    });
-  }
-}
-
-function bindAuthForm(root: HTMLElement, path: RoutePath, context: RenderContext): void {
-  const form = root.querySelector<HTMLFormElement>("#auth-form");
-  if (!form) return;
-  const submission = new SubmissionController();
-  form.querySelector<HTMLInputElement>("input")?.focus();
-
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    clearFormErrors(form);
-    const values = new FormData(form);
-    const value = (name: string): string => String(values.get(name) ?? "");
-    const action = async (): Promise<void> => {
-      if (path === "/login") {
-        await context.auth.login({ email: value("email"), password: value("password") });
-        context.navigate(pendingOnboardingDestination());
-      } else if (path === "/register") {
-        await context.auth.register({
-          displayName: value("displayName"),
-          email: value("email"),
-          password: value("password"),
-          passwordConfirmation: value("passwordConfirmation"),
-        });
-        context.navigate(pendingOnboardingDestination());
-      } else {
-        await context.auth.requestPasswordReset(value("email"));
-        setStatus(form, "If an account is available for that email, a reset link is on its way.");
-      }
-    };
-    void submission.run(action, (state) => updateSubmissionState(form, state)).catch((error: unknown) => showAuthError(form, error));
-  });
-}
-
-function updateSubmissionState(form: HTMLFormElement, state: SubmissionState): void {
-  const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
-  if (!button) return;
-  const loading = state === "loading";
-  button.disabled = loading;
-  button.setAttribute("aria-busy", String(loading));
-  form.setAttribute("aria-busy", String(loading));
-  if (loading) setStatus(form, "Please wait…");
-}
-
-function clearFormErrors(form: HTMLFormElement): void {
-  for (const input of form.querySelectorAll<HTMLInputElement>("input")) input.removeAttribute("aria-invalid");
-  for (const message of form.querySelectorAll<HTMLElement>(".field-error")) message.textContent = "";
-  setStatus(form, "");
-}
-
-function showAuthError(form: HTMLFormElement, error: unknown): void {
-  const controlled = error instanceof AuthError ? error : new AuthError("UNKNOWN", "Something went wrong. Please try again.");
-  for (const [fieldName, message] of Object.entries(controlled.fieldErrors)) {
-    const input = form.elements.namedItem(fieldName);
-    if (input instanceof HTMLInputElement) input.setAttribute("aria-invalid", "true");
-    const fieldError = form.querySelector<HTMLElement>(`#${fieldName}-error`);
-    if (fieldError) fieldError.textContent = message;
-  }
-  setStatus(form, controlled.message);
-  (form.querySelector<HTMLInputElement>('[aria-invalid="true"]') ?? form.querySelector<HTMLElement>("#form-status"))?.focus();
-}
-
-function setStatus(form: HTMLFormElement, message: string): void {
-  const status = form.querySelector<HTMLElement>("#form-status");
-  if (status) status.textContent = message;
-}
-
-function renderProtectedRoute(root: HTMLElement, route: AppRoute, context: RenderContext): void {
-  if (context.coupleSession.status === "error") {
-    root.innerHTML = shell(`<main class="page"><section class="placeholder-card"><p class="eyebrow">Membership check failed</p><h1>We couldn’t verify your shared space</h1><p class="description">Check your connection and try signing in again.</p><div class="protected-actions"><button id="logout-button" class="secondary-button" type="button">Sign out</button><p id="logout-status" class="form-status" role="alert" aria-live="assertive"></p></div></section></main>`);
-    bindLogout(root, context);
-    return;
-  }
-
-  if (route.path === "/onboarding" && context.coupleSession.status === "unlinked") {
-    renderOnboarding(root, context);
-    return;
-  }
-
-  if (route.path === "/invite" && context.coupleSession.status === "linked") {
-    renderInvite(root, context, context.coupleSession.membership);
-    return;
-  }
-
-  const navigation = primaryNavigation
-    .map(([path, label]) => `<a data-route href="${routeHref(path)}" ${route.path === path ? 'aria-current="page"' : ""}>${label}</a>`)
-    .join("");
-  const membership = context.coupleSession.status === "linked" ? context.coupleSession.membership : undefined;
-  if (route.path === "/calendar" && membership && context.authSession.status === "authenticated") {
-    root.innerHTML = shell(`<main class="page">${statusStrip(context)}${renderCalendarPage({ periods: context.periods, loading: context.periodsLoading, error: context.periodsError, coupleId: membership.coupleId, uid: context.authSession.user.uid, service: context.periodService, refresh: context.refreshPeriods, rerender: context.rerender })}</main><nav class="bottom-nav" aria-label="Primary navigation">${navigation}</nav>`);
-    bindCalendarPage(root, { periods: context.periods, loading: context.periodsLoading, error: context.periodsError, coupleId: membership.coupleId, uid: context.authSession.user.uid, service: context.periodService, refresh: context.refreshPeriods, rerender: context.rerender });
-    bindSyncActions(root, context);
-    return;
-  }
-  const page = route.path === "/home" ? homePage(context, membership) : route.path === "/history" ? historyPage(context) : route.path === "/insights" ? insightsPage(context) : settingsPage(context, membership);
-  root.innerHTML = shell(`<main class="page">${statusStrip(context)}${page}</main>
-    <nav class="bottom-nav" aria-label="Primary navigation">${navigation}</nav>`);
-
-  bindLogout(root, context);
-  bindSyncActions(root, context);
-}
-
-function bindSyncActions(root: HTMLElement, context: RenderContext): void {
-  for (const button of root.querySelectorAll<HTMLButtonElement>("#settings-sync-retry, #show-conflicts")) {
-    button.addEventListener("click", () => { button.disabled = true; void context.periodService.replay().finally(() => { button.disabled = false; context.rerender(); }); });
-  }
-}
-
-function historyPage(context: RenderContext): string {
-  const rows = [...context.periods].sort((a, b) => b.startDate.localeCompare(a.startDate)).map((period) => `<li><strong>${formatDate(period.startDate)}${period.endDate ? ` – ${formatDate(period.endDate)}` : ""}</strong><span>Actual record · revision ${period.revision}</span></li>`).join("");
-  return `<section class="beta-page" aria-labelledby="page-title"><p class="eyebrow">Actual records</p><h1 id="page-title">Period history</h1>${context.periodsLoading ? "<p class=\"state-message\">Restoring local history…</p>" : context.periodsError ? "<p class=\"state-message error-state\">History is safe on this device, but could not be read. Try again from Calendar.</p>" : rows ? `<ol class="history-list">${rows}</ol>` : "<p class=\"state-message\">No periods recorded yet. Add your first actual period in Calendar.</p>"}</section>`;
-}
-
-function homePage(context: RenderContext, membership: CoupleMembership | undefined): string {
-  const prediction = predictCycle({ periods: context.periods, asOfDate: localDate() });
-  const upcoming = prediction.expectedDate ? `Expected around ${formatDate(prediction.expectedDate)}` : "Add a few periods to see a local estimate.";
-  return `<section class="beta-page" aria-labelledby="page-title"><p class="eyebrow">Shared cycle journal</p><h1 id="page-title">A calmer way to stay in step.</h1><p class="lead">${escapeHtml(upcoming)}</p><div class="home-action"><a class="primary-link" data-route href="#/calendar">Log a period</a><span>Actual records stay private to your shared space.</span></div><section class="editorial-section"><div><p class="section-kicker">Your space</p><h2>${escapeHtml(membership?.profile.name ?? "Couple Cycle")}</h2></div><p>${context.presence.some((person) => person.userId !== currentUid(context) && person.state === "online") ? "Your partner is here now." : "Your partner’s status updates when they reconnect."}</p></section><section class="actual-note"><strong>Recorded data</strong><span>${context.periods.length} actual period${context.periods.length === 1 ? "" : "s"} · predictions are calculated only on this device.</span></section></section>`;
-}
-
-function insightsPage(context: RenderContext): string {
-  const prediction = predictCycle({ periods: context.periods, asOfDate: localDate() });
-  const range = prediction.predictionWindow ? `${formatDate(prediction.predictionWindow.start)} – ${formatDate(prediction.predictionWindow.end)}` : "Not enough recorded history";
-  return `<section class="beta-page" aria-labelledby="page-title"><p class="eyebrow">Pattern, not a promise</p><h1 id="page-title">Cycle insights</h1><section class="insight-feature"><p class="section-kicker">Next period estimate</p><h2>${escapeHtml(range)}</h2><p>${prediction.confidence.level === "insufficient" ? "Keep logging actual periods; estimates improve with consistent history." : `Confidence: ${prediction.confidence.level}. This is a cycle estimate, not medical advice.`}</p></section><dl class="insight-stats"><div><dt>Typical cycle</dt><dd>${prediction.cycleLength.expected ?? "—"}${prediction.cycleLength.expected ? " days" : ""}</dd></div><div><dt>Recorded periods</dt><dd>${context.periods.length}</dd></div></dl><p class="disclaimer">No fertility or ovulation claims are made. Predictions are derived locally and are never stored or shared as health records.</p></section>`;
-}
-
-function settingsPage(context: RenderContext, membership: CoupleMembership | undefined): string {
-  const failures = context.syncOperations.filter((operation) => operation.status === "failed" || operation.status === "conflict");
-  return `<section class="beta-page" aria-labelledby="page-title"><p class="eyebrow">Account & data</p><h1 id="page-title">Settings</h1><section class="settings-list"><div><strong>Shared space</strong><span>${escapeHtml(membership?.profile.name ?? "")}</span></div><div><strong>Local sync</strong><span>${syncLabel(context.syncState)}${context.syncOperations.length ? ` · ${context.syncOperations.length} pending` : ""}</span></div><div><strong>Partner</strong><span>${context.presence.some((person) => person.userId !== currentUid(context) && person.state === "online") ? "Online" : "Offline"}</span></div></section>${failures.length ? `<section class="conflict-panel" role="alert"><strong>Action needed</strong><p>${failures.length} sync change${failures.length === 1 ? " needs" : "s need"} review. Your local data was kept and no newer remote record was overwritten.</p><button id="settings-sync-retry" class="secondary-button" type="button">Retry sync</button></section>` : ""}<div class="protected-actions"><button id="logout-button" class="secondary-button" type="button">Sign out</button><p id="logout-status" class="form-status" role="alert" aria-live="assertive"></p></div></section>`;
-}
-
-function localDate(): import("../utils/date").CalendarDate { const value = new Date(); return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}` as import("../utils/date").CalendarDate; }
-function formatDate(value: string): string { return new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
-
 function renderOnboarding(root: HTMLElement, context: RenderContext): void {
   const query = queryFromHash(window.location.hash);
-  const coupleId = query.get("couple") ?? "";
-  const inviteCode = query.get("invite") ?? "";
-  const hasInvitation = coupleId.length > 0 && inviteCode.length > 0;
-  root.innerHTML = shell(`<main class="page onboarding-page">
-    <section class="onboarding-heading" aria-labelledby="page-title"><p class="eyebrow">Getting started</p><h1 id="page-title">${hasInvitation ? "Join your partner" : "Create your shared space"}</h1><p class="description">Membership is private, limited to two people, and protected by a one-time invitation.</p></section>
-    <div class="onboarding-grid">
-      <section class="auth-card flow-card" aria-labelledby="create-title"><span class="step-mark" aria-hidden="true">1</span><h2 id="create-title">Create couple</h2><p>Start a private space and become its owner.</p>
-        <form id="create-couple-form" novalidate>${coupleField("name", "Shared space name", "text", "Alex & Sam")}
-          <p class="form-status" data-form-status role="alert" aria-live="assertive" tabindex="-1"></p><button class="primary-button" type="submit"><span>Create and invite</span><span class="button-spinner" aria-hidden="true"></span></button>
-        </form></section>
-      <section class="auth-card flow-card ${hasInvitation ? "highlighted-flow" : ""}" aria-labelledby="join-title"><span class="step-mark" aria-hidden="true">2</span><h2 id="join-title">Join partner</h2><p>${hasInvitation ? "This invitation is ready to be securely verified." : "Paste the couple ID and private code from your partner."}</p>
-        <form id="join-couple-form" novalidate>${coupleField("coupleId", "Couple ID", "text", "Couple ID", coupleId)}${coupleField("inviteCode", "Private invite code", "text", "43-character code", inviteCode)}
-          <p class="form-status" data-form-status role="alert" aria-live="assertive" tabindex="-1"></p><button class="primary-button" type="submit"><span>Accept invitation</span><span class="button-spinner" aria-hidden="true"></span></button>
-        </form></section>
-    </div>
-    <div class="protected-actions"><button id="logout-button" class="secondary-button" type="button">Sign out</button><p id="logout-status" class="form-status" role="alert" aria-live="assertive"></p></div>
-  </main>`);
-
-  const uid = context.authSession.status === "authenticated" ? context.authSession.user.uid : "";
-  bindCoupleForm(root.querySelector<HTMLFormElement>("#create-couple-form"), async (form) => {
-    const name = String(new FormData(form).get("name") ?? "");
-    const result = await context.couples.createCouple(uid, name);
-    clearPendingInviteRoute();
-    context.setMembership(result.membership, result.invite);
-    context.navigate("/invite");
-  });
-  bindCoupleForm(root.querySelector<HTMLFormElement>("#join-couple-form"), async (form) => {
-    const values = new FormData(form);
-    const membership = await context.couples.joinCouple(uid, String(values.get("coupleId") ?? ""), String(values.get("inviteCode") ?? ""));
-    clearPendingInviteRoute();
-    context.setMembership(membership);
-    context.navigate("/home");
-  });
-  bindLogout(root, context);
-  if (hasInvitation) root.querySelector<HTMLButtonElement>("#join-couple-form button[type='submit']")?.focus();
+  root.innerHTML = shell(`<main class="page onboarding-page"><p class="eyebrow">BẮT ĐẦU CÙNG NHAU</p><h1>Tạo không gian của hai bạn</h1><p class="page-lead">Mỗi không gian chỉ dành cho đúng hai người.</p><section class="auth-card flow-card"><h2>Tạo không gian</h2><form id="couple-form">${field("name", "Tên không gian", "text", "Ví dụ: Minh & An")}${submit("Tạo và mời người ấy")}</form></section></main>`);
+  root.querySelector<HTMLFormElement>("#couple-form")?.addEventListener("submit", (event) => { event.preventDefault(); const form = event.currentTarget as HTMLFormElement; void context.couples.createCouple(userId(context), String(new FormData(form).get("name") ?? "")).then((result) => { context.setMembership(result.membership, result.invite); context.navigate("/invite"); }).catch((error: unknown) => setFormStatus(form, error instanceof Error ? error.message : "Không thể tạo không gian.")); });
+  if (query.get("couple")) void query;
 }
-
-function renderInvite(root: HTMLElement, context: RenderContext, membership: CoupleMembership): void {
-  const isOwner = membership.member.role === "owner";
+function setText(root: HTMLElement, selector: string, message: string): void { const target = root.querySelector<HTMLElement>(selector); if (target) target.textContent = message; }
+function renderInvite(root: HTMLElement, context: RenderContext): void {
   const invite = context.invite;
-  const inviteUrl = invite ? buildInviteUrl(invite) : "";
-  const inviteContent = !isOwner
-    ? `<p class="onboarding-note">Only the owner can view or replace invitations.</p><a class="primary-link" data-route href="${routeHref("/home")}">Return home</a>`
-    : invite
-      ? `<label for="share-link">One-time invite link</label><div class="share-row"><input id="share-link" type="text" readonly value="${escapeHtml(inviteUrl)}"><button id="copy-invite" class="secondary-button" type="button">Copy</button></div><p class="invite-expiry">Expires ${escapeHtml(new Date(invite.expiresAt).toLocaleString())}. Once accepted, it cannot be replayed.</p><div class="invite-actions"><button id="regenerate-invite" class="secondary-button" type="button">Replace invite</button><a class="primary-link" data-route href="${routeHref("/home")}">Continue home</a></div><p id="invite-status" class="form-status" role="status" aria-live="polite"></p>`
-      : `<div class="inline-loading"><span class="loading-indicator" aria-hidden="true"></span><p>${context.inviteLoading ? "Loading your invitation…" : "No active invitation is available."}</p></div>`;
-
-  root.innerHTML = shell(`<main class="page"><section class="placeholder-card invite-card" aria-labelledby="page-title"><p class="eyebrow">Private invitation</p><h1 id="page-title">Invite your partner</h1><p class="description">Share this link privately. The long secret in it is part of the security boundary.</p>${inviteContent}</section></main>`);
-
-  root.querySelector<HTMLButtonElement>("#copy-invite")?.addEventListener("click", () => {
-    void navigator.clipboard.writeText(inviteUrl).then(() => setInviteStatus(root, "Invitation copied.")).catch(() => setInviteStatus(root, "Copy failed. Select the link and copy it manually."));
-  });
-  const regenerate = root.querySelector<HTMLButtonElement>("#regenerate-invite");
-  regenerate?.addEventListener("click", () => {
-    regenerate.disabled = true;
-    setInviteStatus(root, "Replacing the old invitation…");
-    const uid = context.authSession.status === "authenticated" ? context.authSession.user.uid : "";
-    void context.couples.regenerateInvite(uid, membership.coupleId).then((nextInvite) => {
-      context.setInvite(nextInvite);
-    }).catch((error: unknown) => {
-      regenerate.disabled = false;
-      setInviteStatus(root, coupleErrorMessage(error));
-    });
-  });
-}
-
-function bindCoupleForm(form: HTMLFormElement | null, action: (form: HTMLFormElement) => Promise<void>): void {
-  if (!form) return;
-  const submission = new SubmissionController();
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    clearCoupleForm(form);
-    void submission.run(() => action(form), (state) => updateCoupleSubmission(form, state)).catch((error: unknown) => {
-      showCoupleError(form, error);
-    });
-  });
-}
-
-function updateCoupleSubmission(form: HTMLFormElement, state: SubmissionState): void {
-  const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
-  if (!button) return;
-  const loading = state === "loading";
-  button.disabled = loading;
-  button.setAttribute("aria-busy", String(loading));
-  form.setAttribute("aria-busy", String(loading));
-  if (loading) setCoupleFormStatus(form, "Please wait…");
-}
-
-function clearCoupleForm(form: HTMLFormElement): void {
-  for (const input of form.querySelectorAll<HTMLInputElement>("input")) input.removeAttribute("aria-invalid");
-  for (const message of form.querySelectorAll<HTMLElement>(".field-error")) message.textContent = "";
-  setCoupleFormStatus(form, "");
-}
-
-function showCoupleError(form: HTMLFormElement, error: unknown): void {
-  const controlled = error instanceof CoupleError ? error : new CoupleError("UNKNOWN", "Something went wrong. Please try again.");
-  for (const [fieldName, message] of Object.entries(controlled.fieldErrors)) {
-    const input = form.elements.namedItem(fieldName);
-    if (input instanceof HTMLInputElement) input.setAttribute("aria-invalid", "true");
-    const fieldError = form.querySelector<HTMLElement>(`#${fieldName}-error`);
-    if (fieldError) fieldError.textContent = message;
-  }
-  setCoupleFormStatus(form, controlled.message);
-  (form.querySelector<HTMLInputElement>('[aria-invalid="true"]') ?? form.querySelector<HTMLElement>("[data-form-status]"))?.focus();
-}
-
-function setCoupleFormStatus(form: HTMLFormElement, message: string): void {
-  const status = form.querySelector<HTMLElement>("[data-form-status]");
-  if (status) status.textContent = message;
-}
-
-function coupleField(id: string, label: string, type: string, placeholder: string, value = ""): string {
-  return `<div class="field"><label for="${id}">${label}</label><input id="${id}" name="${id}" type="${type}" placeholder="${placeholder}" value="${escapeHtml(value)}" aria-describedby="${id}-error" required><p class="field-error" id="${id}-error"></p></div>`;
-}
-
-function buildInviteUrl(invite: InviteDetails): string {
-  return `${window.location.origin}${window.location.pathname}#/onboarding?couple=${encodeURIComponent(invite.coupleId)}&invite=${encodeURIComponent(invite.code)}`;
-}
-
-function setInviteStatus(root: HTMLElement, message: string): void {
-  const status = root.querySelector<HTMLElement>("#invite-status");
-  if (status) status.textContent = message;
-}
-
-function coupleErrorMessage(error: unknown): string {
-  return error instanceof CoupleError ? error.message : "Something went wrong. Please try again.";
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>'"]/gu, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character);
-}
-
-function bindLogout(root: HTMLElement, context: RenderContext): void {
-
-  const button = root.querySelector<HTMLButtonElement>("#logout-button");
-  button?.addEventListener("click", () => {
-    button.disabled = true;
-    button.setAttribute("aria-busy", "true");
-    void context.auth.logout().then(() => context.navigate("/login")).catch(() => {
-      button.disabled = false;
-      button.setAttribute("aria-busy", "false");
-      const status = root.querySelector<HTMLElement>("#logout-status");
-      if (status) status.textContent = "We could not sign you out. Please try again.";
-    });
-  });
-}
-
-const PENDING_INVITE_ROUTE = "couple-cycle:pending-invite-route";
-
-function pendingOnboardingDestination(): string {
-  try {
-    return sessionStorage.getItem(PENDING_INVITE_ROUTE) ?? "/onboarding";
-  } catch {
-    return "/onboarding";
-  }
-}
-
-function clearPendingInviteRoute(): void {
-  try {
-    sessionStorage.removeItem(PENDING_INVITE_ROUTE);
-  } catch {
-    // Storage can be unavailable in hardened/private browser contexts.
-  }
+  const url = invite ? `${window.location.origin}${window.location.pathname}#/onboarding?couple=${encodeURIComponent(invite.coupleId)}&invite=${encodeURIComponent(invite.code)}` : "";
+  root.innerHTML = shell(`<main class="page"><section class="notice-card invite-card"><span class="hero-orb">♡</span><p class="eyebrow">MỜI NGƯỜI ẤY</p><h1>Chia sẻ không gian này</h1><p>Gửi liên kết riêng tư bên dưới cho người bạn muốn đồng hành.</p>${invite ? `<div class="share-row"><input id="invite-link" readonly value="${escapeHtml(url)}"><button id="copy-invite" class="secondary-button" type="button">Sao chép</button></div>` : "<p>Đang tạo lời mời…</p>"}<a class="primary-link" data-route href="#/home">Đến trang hôm nay →</a></section></main>`);
+  root.querySelector<HTMLButtonElement>("#copy-invite")?.addEventListener("click", () => { void navigator.clipboard.writeText(url); });
 }

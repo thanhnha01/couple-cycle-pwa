@@ -67,13 +67,13 @@ export class CoupleService implements CoupleApplicationService {
 
   private createToken(): string {
     const token = this.tokenFactory();
-    if (!isInviteToken(token)) throw new CoupleError("UNKNOWN", "A secure invitation could not be created. Please try again.");
+    if (!isInviteToken(token)) throw new CoupleError("UNKNOWN", "Không thể tạo lời mời an toàn. Vui lòng thử lại.");
     return token;
   }
 }
 
 function requireUid(uid: string): string {
-  if (!uid.trim()) throw new CoupleError("UNAUTHORIZED", "Sign in to continue.");
+  if (!uid.trim()) throw new CoupleError("UNAUTHORIZED", "Hãy đăng nhập để tiếp tục.");
   return uid;
 }
 

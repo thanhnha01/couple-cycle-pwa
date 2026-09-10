@@ -143,6 +143,35 @@
             "$other": { ".validate": false }
           }
         },
+        "events": {
+          ".read": "auth != null && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
+          "$eventId": {
+            ".write": "auth != null && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
+            ".validate": "!newData.exists() || newData.hasChildren(['title', 'date', 'kind', 'reminderDays', 'createdAt', 'createdBy'])",
+            "title": { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 80" },
+            "date": { ".validate": "newData.isString() && newData.val().length === 10" },
+            "kind": { ".validate": "newData.val() === 'anniversary' || newData.val() === 'birthday' || newData.val() === 'holiday' || newData.val() === 'date' || newData.val() === 'custom'" },
+            "reminderDays": {
+              ".validate": "newData.hasChildren()",
+              "$day": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 30" }
+            },
+            "createdAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())" },
+            "createdBy": { ".validate": "newData.isString() && ((!data.exists() && newData.val() === auth.uid) || newData.val() === data.val())" },
+            "$other": { ".validate": false }
+          }
+        },
+        "notificationTokens": {
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
+            ".write": "auth != null && auth.uid === $uid && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
+            "$tokenId": {
+              ".validate": "!newData.exists() || newData.hasChildren(['token', 'updatedAt'])",
+              "token": { ".validate": "newData.isString() && newData.val().length > 20" },
+              "updatedAt": { ".validate": "newData.isNumber() && newData.val() === now" },
+              "$other": { ".validate": false }
+            }
+          }
+        },
         "$other": {
           ".validate": false
         }

@@ -35,25 +35,25 @@ export function mapFirebaseAuthError(error: unknown, operation: "register" | "lo
 
   const code = firebaseCode(error);
   if (code === "auth/network-request-failed") {
-    return new AuthError("NETWORK_ERROR", "Check your connection and try again.");
+    return new AuthError("NETWORK_ERROR", "Kiểm tra kết nối rồi thử lại nhé.");
   }
   if (code === "auth/too-many-requests") {
-    return new AuthError("TOO_MANY_REQUESTS", "Too many attempts. Please wait a little before trying again.");
+    return new AuthError("TOO_MANY_REQUESTS", "Bạn đã thử quá nhiều lần. Hãy đợi một chút rồi thử lại.");
   }
   if (code === "auth/weak-password") {
-    return new AuthError("WEAK_PASSWORD", "Choose a stronger password with at least 8 characters.", {
-      password: "Choose a stronger password with at least 8 characters.",
+    return new AuthError("WEAK_PASSWORD", "Hãy chọn mật khẩu mạnh hơn, có ít nhất 8 ký tự.", {
+      password: "Hãy chọn mật khẩu mạnh hơn, có ít nhất 8 ký tự.",
     });
   }
   if (operation === "login" && ["auth/invalid-credential", "auth/user-not-found", "auth/wrong-password"].includes(code ?? "")) {
-    return new AuthError("INVALID_CREDENTIALS", "The email or password is incorrect.");
+    return new AuthError("INVALID_CREDENTIALS", "Email hoặc mật khẩu chưa đúng.");
   }
   if (operation === "register" && ["auth/email-already-in-use", "auth/invalid-email", "auth/operation-not-allowed"].includes(code ?? "")) {
-    return new AuthError("ACCOUNT_CREATION_FAILED", "We could not create an account with those details.");
+    return new AuthError("ACCOUNT_CREATION_FAILED", "Không thể tạo tài khoản với thông tin này.");
   }
   if (operation === "reset") {
-    return new AuthError("RESET_REQUEST_FAILED", "We could not send the reset email right now. Please try again.");
+    return new AuthError("RESET_REQUEST_FAILED", "Chưa thể gửi email đặt lại mật khẩu. Vui lòng thử lại.");
   }
 
-  return new AuthError("UNKNOWN", operation === "logout" ? "We could not sign you out. Please try again." : "Something went wrong. Please try again.");
+  return new AuthError("UNKNOWN", operation === "logout" ? "Không thể đăng xuất lúc này. Vui lòng thử lại." : "Đã có lỗi xảy ra. Vui lòng thử lại.");
 }

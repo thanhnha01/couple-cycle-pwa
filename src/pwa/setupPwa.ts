@@ -26,7 +26,7 @@ export async function setupPwa(): Promise<void> {
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     const installEvent = event as BeforeInstallPromptEvent;
-    showNotice("Install Couple Cycle for quick access.", "Install", () => {
+    showNotice("Cài Nhịp Đôi để mở nhanh hơn.", "Cài đặt", () => {
       void installEvent.prompt();
     });
   });
@@ -39,7 +39,7 @@ export async function setupPwa(): Promise<void> {
     });
 
     const offerUpdate = (worker: ServiceWorker): void => {
-      showNotice("A new version is ready.", "Update", () => {
+      showNotice("Phiên bản mới đã sẵn sàng.", "Cập nhật", () => {
         worker.postMessage({ type: "SKIP_WAITING" });
       });
     };

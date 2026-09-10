@@ -177,7 +177,7 @@ export class FirebaseCoupleRepository implements CoupleRepository {
   async getOwnerInvite(uid: string, coupleId: string): Promise<InviteDetails> {
     const membership = await this.readMembership(coupleId, uid);
     if (membership.member.role !== "owner") {
-      throw new CoupleError("UNAUTHORIZED", "Only the couple owner can manage invitations.");
+      throw new CoupleError("UNAUTHORIZED", "Chỉ người tạo không gian mới có thể quản lý lời mời.");
     }
     const snapshot = await get(ref(getFirebaseDatabase(), `couples/${coupleId}/invite`)).catch((error: unknown) => {
       throw mapDatabaseFailure(error);
@@ -296,19 +296,19 @@ function validateRedeemableLookup(lookup: InviteLookup | null, requestedCoupleId
 }
 
 function unauthorizedAssociation(): CoupleError {
-  return new CoupleError("UNAUTHORIZED", "Your couple association could not be verified.");
+  return new CoupleError("UNAUTHORIZED", "Không thể xác thực không gian chung của bạn.");
 }
 
 function mapDatabaseFailure(error: unknown): CoupleError {
   if (error instanceof CoupleError) return error;
   const code = firebaseDatabaseErrorCode(error);
   if (code === "PERMISSION_DENIED" || code === "database/permission-denied") {
-    return new CoupleError("UNAUTHORIZED", "This action is not permitted.");
+    return new CoupleError("UNAUTHORIZED", "Bạn không có quyền thực hiện thao tác này.");
   }
   if (code === "NETWORK_ERROR" || code === "database/network-error") {
     return new CoupleError("NETWORK_ERROR", "Check your connection and try again.");
   }
-  return new CoupleError("UNKNOWN", "The shared space could not be updated. Please try again.");
+  return new CoupleError("UNKNOWN", "Không thể cập nhật không gian chung. Vui lòng thử lại.");
 }
 
 async function serverAlignedExpiration(requestedExpiration: number): Promise<number> {

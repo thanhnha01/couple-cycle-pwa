@@ -25,7 +25,7 @@ export function createRouter({ routes, onRouteChange }: RouterOptions): Router {
       window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}#${route.path}`);
     }
 
-    document.title = `${route.title} · Couple Cycle`;
+    document.title = `${route.title} · Nhịp Đôi`;
     onRouteChange(route);
   };
 

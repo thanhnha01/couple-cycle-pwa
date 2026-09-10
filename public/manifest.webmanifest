@@ -1,7 +1,7 @@
 {
-  "name": "Couple Cycle",
-  "short_name": "Couple Cycle",
-  "description": "A private, offline-ready space for couples to understand cycle patterns together.",
+  "name": "Nhịp Đôi",
+  "short_name": "Nhịp Đôi",
+  "description": "Không gian riêng tư để hai bạn ghi nhớ và quan tâm nhau mỗi ngày.",
   "start_url": "./#/login",
   "scope": "./",
   "display": "standalone",

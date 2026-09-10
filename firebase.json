@@ -2,6 +2,9 @@
   "database": {
     "rules": "database.rules.json"
   },
+  "functions": {
+    "source": "functions"
+  },
   "emulators": {
     "database": {
       "host": "127.0.0.1",

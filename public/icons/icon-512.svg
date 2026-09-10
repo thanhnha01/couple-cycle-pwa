@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Couple Cycle placeholder icon">
-  <rect width="512" height="512" rx="128" fill="#8c3f5d"/>
-  <circle cx="256" cy="256" r="150" fill="none" stroke="#fff9fb" stroke-width="38" stroke-dasharray="696 246" stroke-linecap="round"/>
-  <circle cx="203" cy="243" r="24" fill="#fff9fb"/>
-  <circle cx="309" cy="243" r="24" fill="#fff9fb"/>
-  <path d="M186 317c40 37 99 37 140 0" fill="none" stroke="#fff9fb" stroke-width="27" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 192 192" role="img" aria-label="Biểu tượng Nhịp Đôi">
+  <defs><linearGradient id="a" x1="22" y1="18" x2="172" y2="177" gradientUnits="userSpaceOnUse"><stop stop-color="#F59CAB"/><stop offset="1" stop-color="#B93D60"/></linearGradient></defs>
+  <rect width="192" height="192" rx="48" fill="url(#a)"/>
+  <path d="M96 147 47 100c-25-24-4-64 28-51 9 4 16 13 21 22 5-9 12-18 21-22 32-13 53 27 28 51l-49 47Z" fill="#FFF8F7"/>
+  <path d="M64 102c9 10 19 15 32 15s23-5 32-15" fill="none" stroke="#D55771" stroke-linecap="round" stroke-width="9"/>
+  <circle cx="74" cy="88" r="5" fill="#D55771"/><circle cx="118" cy="88" r="5" fill="#D55771"/>
 </svg>

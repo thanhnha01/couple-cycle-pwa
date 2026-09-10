@@ -101,7 +101,7 @@ describe("AuthService login and reset", () => {
     const service = new AuthService(provider, new MockProfiles());
     await expect(service.login({ email: "person@example.com", password: "wrong" })).rejects.toMatchObject({
       code: "INVALID_CREDENTIALS",
-      message: "The email or password is incorrect.",
+      message: "Email hoặc mật khẩu chưa đúng.",
     });
   });
 
