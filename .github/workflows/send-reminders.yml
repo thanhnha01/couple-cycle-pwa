@@ -1,37 +1,31 @@
-name: Verify and deploy Firebase Rules
+name: Send couple reminders
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "database.rules.json"
-      - "firebase.json"
-      - "src/notifications/**"
+  schedule:
+    # Every 15 minutes, deliberately offset from the busiest top-of-hour slots.
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: firebase-production
+  group: couple-reminders
   cancel-in-progress: false
 
 jobs:
-  verify-and-deploy:
+  send-reminders:
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test
-      - name: Authenticate Firebase CLI
+      - name: Install reminder runner
+        working-directory: functions
+        run: npm install
+      - name: Authenticate Firebase Admin SDK
         shell: bash
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -39,7 +33,6 @@ jobs:
           test -n "$FIREBASE_SERVICE_ACCOUNT"
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
-      - name: Deploy Database Rules
-        env:
-          FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-        run: pnpm exec firebase deploy --only database --project "$FIREBASE_PROJECT_ID" --non-interactive
+      - name: Send due reminders
+        working-directory: functions
+        run: npm run run:reminders
