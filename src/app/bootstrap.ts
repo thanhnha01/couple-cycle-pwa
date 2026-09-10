@@ -23,6 +23,7 @@ import { DailyConnectionService } from "../daily/service";
 import type { PrivateCheckIn, SharedTask } from "../daily/types";
 import { notifyDueEvents } from "../notifications/eventReminders";
 import { renderApplication } from "../ui/renderApplication";
+import { CoupleFeatureService } from "../couple/features";
 import { guardedDestination } from "./routeGuards";
 import { createRouter, queryFromHash } from "./router";
 import { routes, type AppRoute } from "./routes";
@@ -48,6 +49,7 @@ export async function bootstrapApplication(): Promise<void> {
   const coupleSession = new CoupleSessionStore(couples);
   const eventService = new CoupleEventService(isFirebaseConfigured);
   const dailyService = new DailyConnectionService(isFirebaseConfigured);
+  const featureService = new CoupleFeatureService();
   let currentRoute: AppRoute = routes[0]!;
   let loadedUid: string | undefined;
   let currentInvite: InviteDetails | undefined;
@@ -150,6 +152,12 @@ export async function bootstrapApplication(): Promise<void> {
         currentInvite = invite;
         render();
       },
+      updateStartDate: async (startDate: string) => {
+        if (authSession.snapshot.status !== "authenticated" || coupleSession.snapshot.status !== "linked") return;
+        if (!couples.updateStartDate) return;
+        await couples.updateStartDate(authSession.snapshot.user.uid, coupleSession.snapshot.membership.coupleId, startDate);
+        coupleSession.updateProfile({ ...coupleSession.snapshot.membership.profile, startDate });
+      },
       periods,
       periodsLoading,
       periodsError,
@@ -163,6 +171,7 @@ export async function bootstrapApplication(): Promise<void> {
       sharedTasks,
       privateCheckins,
       dailyService,
+      featureService,
       rerender: render,
     });
   };

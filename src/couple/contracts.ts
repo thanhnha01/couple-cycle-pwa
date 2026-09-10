@@ -14,6 +14,7 @@ export interface CoupleRepository {
   redeem(uid: string, coupleId: string, inviteCode: string): Promise<CoupleMembership>;
   regenerateInvite(uid: string, coupleId: string, inviteCode: string, expiresAt: number): Promise<InviteDetails>;
   getOwnerInvite(uid: string, coupleId: string): Promise<InviteDetails>;
+  updateStartDate?(uid: string, coupleId: string, startDate: string): Promise<void>;
 }
 
 export interface CoupleApplicationService {
@@ -22,4 +23,5 @@ export interface CoupleApplicationService {
   joinCouple(uid: string, coupleId: string, inviteCode: string): Promise<CoupleMembership>;
   regenerateInvite(uid: string, coupleId: string): Promise<InviteDetails>;
   getOwnerInvite(uid: string, coupleId: string): Promise<InviteDetails>;
+  updateStartDate?(uid: string, coupleId: string, startDate: string): Promise<void>;
 }

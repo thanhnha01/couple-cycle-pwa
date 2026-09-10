@@ -52,6 +52,10 @@
           "memberCount": {
             ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 1) || (data.val() === 1 && newData.val() === 2) || newData.val() === data.val())"
           },
+          "startDate": {
+            ".write": "auth != null && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
+            ".validate": "newData.isString() && newData.val().matches(/^\\d{4}-\\d{2}-\\d{2}$/)"
+          },
           "$other": {
             ".validate": false
           }

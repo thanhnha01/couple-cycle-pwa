@@ -1,9 +1,9 @@
-import { sendDueEventReminders } from "./reminders.js";
+import { sendDailyAndMilestoneReminders, sendDueEventReminders } from "./reminders.js";
 import { deleteApp, getApps } from "firebase-admin/app";
 
-void sendDueEventReminders()
-  .then(async ({ sent, skipped }) => {
-    console.log(`Nhịp Đôi reminders complete: ${sent} sent, ${skipped} duplicate runs skipped.`);
+void Promise.all([sendDueEventReminders(), sendDailyAndMilestoneReminders()])
+  .then(async ([events, daily]) => {
+    console.log(`Nhịp Đôi reminders complete: ${events.sent + daily.sent} sent, ${events.skipped} duplicate runs skipped.`);
     await Promise.all(getApps().map((app) => deleteApp(app)));
   })
   .catch(async (error: unknown) => {

@@ -7,6 +7,7 @@ export interface CoupleProfile {
   createdAt: Timestamp;
   ownerUid: string;
   memberCount: 1 | 2;
+  startDate?: string;
 }
 
 export interface CoupleMember {

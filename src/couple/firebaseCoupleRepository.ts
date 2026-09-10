@@ -187,6 +187,15 @@ export class FirebaseCoupleRepository implements CoupleRepository {
     return { coupleId, code: invite.code, expiresAt: invite.expiresAt };
   }
 
+  async updateStartDate(uid: string, coupleId: string, startDate: string): Promise<void> {
+    await this.readMembership(coupleId, uid);
+    try {
+      await set(ref(getFirebaseDatabase(), `couples/${coupleId}/profile/startDate`), startDate);
+    } catch (error) {
+      throw mapDatabaseFailure(error);
+    }
+  }
+
   private async ensureAssociation(uid: string, coupleId: string): Promise<void> {
     await set(ref(getFirebaseDatabase(), `users/${uid}/coupleId`), coupleId).catch((error: unknown) => {
       throw mapDatabaseFailure(error);
@@ -245,7 +254,7 @@ function parseProfile(snapshot: DataSnapshot): CoupleProfile {
   if (!value || typeof value.name !== "string" || typeof value.createdAt !== "number" || typeof value.ownerUid !== "string" || (value.memberCount !== 1 && value.memberCount !== 2)) {
     throw unauthorizedAssociation();
   }
-  return { name: value.name, createdAt: timestamp(value.createdAt), ownerUid: value.ownerUid, memberCount: value.memberCount };
+  return { name: value.name, createdAt: timestamp(value.createdAt), ownerUid: value.ownerUid, memberCount: value.memberCount, ...(typeof value.startDate === "string" ? { startDate: value.startDate } : {}) };
 }
 
 function parseMember(snapshot: DataSnapshot): CoupleMember {

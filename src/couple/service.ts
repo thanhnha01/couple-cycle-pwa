@@ -65,6 +65,15 @@ export class CoupleService implements CoupleApplicationService {
     return this.repository.getOwnerInvite(requireUid(uid), coupleId);
   }
 
+  updateStartDate(uid: string, coupleId: string, startDate: string): Promise<void> {
+    const normalized = startDate.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/u.test(normalized)) throw new CoupleError("VALIDATION_FAILED", "Ngày bắt đầu chưa hợp lệ.");
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+    if (normalized > today) throw new CoupleError("VALIDATION_FAILED", "Ngày bắt đầu không thể ở tương lai.");
+    if (!this.repository.updateStartDate) throw new CoupleError("UNKNOWN", "Tính năng này chưa sẵn sàng.");
+    return this.repository.updateStartDate(requireUid(uid), coupleId, normalized);
+  }
+
   private createToken(): string {
     const token = this.tokenFactory();
     if (!isInviteToken(token)) throw new CoupleError("UNKNOWN", "Không thể tạo lời mời an toàn. Vui lòng thử lại.");
