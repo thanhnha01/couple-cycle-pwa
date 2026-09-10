@@ -180,7 +180,7 @@ export class OfflinePeriodService {
       await this.options.store.removeOperation(operation.id);
       this.operations = this.operations.filter((item) => item.id !== operation.id);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Sync failed.";
+      const message = error instanceof Error ? error.message : "Đồng bộ chưa thành công.";
       const conflict = /changed on another device|conflict|stale/i.test(message);
       const attempts = inFlight.attempts;
       const failed: SyncOperation = {

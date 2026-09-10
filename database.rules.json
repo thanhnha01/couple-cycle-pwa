@@ -160,6 +160,20 @@
             "$other": { ".validate": false }
           }
         },
+        "sharedTasks": {
+          ".read": "auth != null && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
+          "$taskId": {
+            ".write": "auth != null && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
+            ".validate": "!newData.exists() || newData.hasChildren(['title', 'completed', 'createdAt', 'createdBy'])",
+            "title": { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 120" },
+            "completed": { ".validate": "newData.isBoolean()" },
+            "createdAt": { ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || newData.val() === data.val())" },
+            "createdBy": { ".validate": "newData.isString() && ((!data.exists() && newData.val() === auth.uid) || newData.val() === data.val())" },
+            "completedAt": { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() === now)" },
+            "completedBy": { ".validate": "!newData.exists() || (newData.isString() && newData.val() === auth.uid)" },
+            "$other": { ".validate": false }
+          }
+        },
         "notificationTokens": {
           "$uid": {
             ".read": "auth != null && auth.uid === $uid && root.child('couples').child($coupleId).child('members').child(auth.uid).exists()",
@@ -174,6 +188,19 @@
         },
         "$other": {
           ".validate": false
+        }
+      }
+    },
+    "privateCheckins": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$date": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "!newData.exists() || newData.hasChildren(['coupleId', 'mood', 'createdAt'])",
+          "coupleId": { ".validate": "newData.isString() && root.child('couples').child(newData.val()).child('members').child(auth.uid).exists()" },
+          "mood": { ".validate": "newData.val() === 'vui' || newData.val() === 'on' || newData.val() === 'met' || newData.val() === 'can-om'" },
+          "createdAt": { ".validate": "newData.isNumber() && newData.val() === now" },
+          "$other": { ".validate": false }
         }
       }
     },

@@ -21,7 +21,7 @@ export class FirebasePeriodRepository implements PeriodRepository {
       return;
     });
     if (!result.committed && !(isStoredPeriod(result.snapshot.val()) && result.snapshot.val().mutationId === mutationId)) {
-      throw new Error("Conflict: this period already exists with different data.");
+      throw new Error("Dữ liệu chu kỳ này đã được cập nhật theo cách khác. Hãy tải lại để xem phiên bản mới nhất.");
     }
   }
 

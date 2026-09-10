@@ -19,6 +19,8 @@ import type { Presence } from "../couple/types";
 import type { SyncOperation, SyncState } from "../sync/types";
 import { CoupleEventService } from "../events/service";
 import type { CoupleEvent } from "../events/types";
+import { DailyConnectionService } from "../daily/service";
+import type { PrivateCheckIn, SharedTask } from "../daily/types";
 import { notifyDueEvents } from "../notifications/eventReminders";
 import { renderApplication } from "../ui/renderApplication";
 import { guardedDestination } from "./routeGuards";
@@ -45,6 +47,7 @@ export async function bootstrapApplication(): Promise<void> {
   });
   const coupleSession = new CoupleSessionStore(couples);
   const eventService = new CoupleEventService(isFirebaseConfigured);
+  const dailyService = new DailyConnectionService(isFirebaseConfigured);
   let currentRoute: AppRoute = routes[0]!;
   let loadedUid: string | undefined;
   let currentInvite: InviteDetails | undefined;
@@ -57,7 +60,11 @@ export async function bootstrapApplication(): Promise<void> {
   let syncOperations: SyncOperation[] = [];
   let presence: Presence[] = [];
   let events: CoupleEvent[] = [];
+  let sharedTasks: SharedTask[] = [];
+  let privateCheckins: PrivateCheckIn[] = [];
   let stopEvents: (() => void) | undefined;
+  let stopTasks: (() => void) | undefined;
+  let stopCheckins: (() => void) | undefined;
   let stopRealtime: (() => void) | undefined;
   let activeCoupleId: string | undefined;
 
@@ -70,6 +77,12 @@ export async function bootstrapApplication(): Promise<void> {
     events = [];
     stopEvents?.();
     stopEvents = undefined;
+    sharedTasks = [];
+    privateCheckins = [];
+    stopTasks?.();
+    stopTasks = undefined;
+    stopCheckins?.();
+    stopCheckins = undefined;
     periods = [];
     loadedPeriodsCoupleId = undefined;
     coupleSession.reset();
@@ -147,6 +160,9 @@ export async function bootstrapApplication(): Promise<void> {
       presence,
       events,
       eventService,
+      sharedTasks,
+      privateCheckins,
+      dailyService,
       rerender: render,
     });
   };
@@ -192,6 +208,12 @@ export async function bootstrapApplication(): Promise<void> {
       }
       if (!stopEvents) {
         stopEvents = eventService.subscribe(membership.coupleId, (nextEvents) => { events = nextEvents; notifyDueEvents(events); render(); });
+      }
+      if (!stopTasks) {
+        stopTasks = dailyService.subscribeTasks(membership.coupleId, (nextTasks) => { sharedTasks = nextTasks; render(); });
+      }
+      if (!stopCheckins && authSession.snapshot.status === "authenticated") {
+        stopCheckins = dailyService.subscribeCheckins(authSession.snapshot.user.uid, (nextCheckins) => { privateCheckins = nextCheckins.filter((checkin) => checkin.coupleId === membership.coupleId); render(); });
       }
       void periodService.replay();
     }

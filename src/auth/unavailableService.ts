@@ -4,7 +4,7 @@ import type { AuthUser, LoginInput, RegisterInput } from "./types";
 import { validateLogin, validateRegistration, validateResetEmail } from "./validation";
 
 const configurationError = (): AuthError =>
-  new AuthError("CONFIGURATION_ERROR", "Authentication is not configured for this deployment.");
+  new AuthError("CONFIGURATION_ERROR", "Ứng dụng chưa được cấu hình đăng nhập trên bản triển khai này.");
 
 export class UnavailableAuthService implements AuthenticationService {
   register(input: RegisterInput): Promise<AuthUser> {
